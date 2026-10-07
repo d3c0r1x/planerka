@@ -48,6 +48,20 @@ void main() {
     expect(updated.todayDone, isFalse);
   });
 
+  test(
+    'habit streak stays active through the current day before check-in',
+    () async {
+      final habit = await repository.addHabit('Вымышленная привычка');
+      await repository.checkIn(habit.id, DateTime(2026, 10, 6));
+      await repository.checkIn(habit.id, DateTime(2026, 10, 7));
+
+      final summary = await repository.summary(habit.id, DateTime(2026, 10, 8));
+
+      expect(summary.todayDone, isFalse);
+      expect(summary.streak, 2);
+    },
+  );
+
   test('journal can save, edit, list and delete private entries', () async {
     final entry = await repository.addJournal('Нейтральная запись', mood: 4);
     expect((await repository.listJournal()).single.text, 'Нейтральная запись');

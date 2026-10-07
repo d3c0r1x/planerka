@@ -2,6 +2,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/app_database.dart';
 import '../../core/models.dart';
+import '../gamification/gamification_service.dart';
 
 class PlanningRepository {
   PlanningRepository(
@@ -45,12 +46,15 @@ class PlanningRepository {
 
   Future<void> complete(String taskId) async {
     final now = _now().toUtc().toIso8601String();
-    await database.database.update(
+    final changed = await database.database.update(
       'tasks',
       {'status': 'completed', 'completed_at': now, 'updated_at': now},
       where: 'id = ?',
       whereArgs: [taskId],
     );
+    if (changed > 0) {
+      await GamificationService(database).awardTask(taskId, occurredAt: _now());
+    }
     await database.remindersChanged();
   }
 

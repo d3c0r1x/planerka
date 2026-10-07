@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart' show ConflictAlgorithm;
 import 'package:uuid/uuid.dart';
 
 import '../../core/app_database.dart';
+import '../gamification/gamification_service.dart';
 
 class Habit {
   const Habit({
@@ -106,6 +107,8 @@ class WellbeingRepository {
       'value': 1,
       'created_at': _now().toUtc().toIso8601String(),
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    await GamificationService(database)
+        .awardHabitCheckIn(habitId, date, occurredAt: _now());
   }
 
   Future<void> uncheck(String habitId, DateTime date) async {
@@ -135,7 +138,9 @@ class WellbeingRepository {
         )
         .length;
     var streak = 0;
-    var cursor = today;
+    var cursor = dates.contains(_date(today))
+        ? today
+        : today.subtract(const Duration(days: 1));
     while (dates.contains(_date(cursor))) {
       streak++;
       cursor = cursor.subtract(const Duration(days: 1));

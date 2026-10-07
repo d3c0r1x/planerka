@@ -17,7 +17,7 @@ class AppDatabase {
     final database = await source.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 3,
+        version: 4,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: (db, version) async {
           await db.execute('''
@@ -115,6 +115,7 @@ class AppDatabase {
               value TEXT NOT NULL
             )
           ''');
+          await _createGamificationTables(db);
         },
         onUpgrade: (db, oldVersion, newVersion) async {
           if (oldVersion < 2) {
@@ -136,6 +137,7 @@ class AppDatabase {
               'CREATE TABLE app_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
             );
           }
+          if (oldVersion < 4) await _createGamificationTables(db);
         },
       ),
     );
@@ -143,4 +145,45 @@ class AppDatabase {
   }
 
   Future<void> close() => database.close();
+
+  static Future<void> _createGamificationTables(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE xp_events (
+        event_id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        points INTEGER NOT NULL CHECK(points > 0),
+        occurred_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE game_quests (
+        id TEXT PRIMARY KEY,
+        period TEXT NOT NULL,
+        period_start TEXT NOT NULL,
+        quest_key TEXT NOT NULL,
+        title TEXT NOT NULL,
+        target INTEGER NOT NULL,
+        progress INTEGER NOT NULL DEFAULT 0,
+        reward_xp INTEGER NOT NULL,
+        completed_at TEXT,
+        UNIQUE(period, period_start, quest_key)
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE game_achievements (
+        key TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        unlocked_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE custom_rewards (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        redeemed_at TEXT
+      )
+    ''');
+  }
 }

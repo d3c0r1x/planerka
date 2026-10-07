@@ -118,7 +118,7 @@ GREEN: release APK 53.9 MB собран с локальным seed из 34 за�
 | Цель | Состояние | Зависимость | Коммит |
 | --- | --- | --- | --- |
 | G11 — тёмная тема и главная панель с реальными привычками/серией | COMPLETE | — | a3b5acf |
-| G12 — опыт, серии, квесты, достижения | NOT_IMPLEMENTED | G11 | — |
+| G12 — опыт, серии, квесты, достижения | COMPLETE | G11 | pending commit |
 | G13 — загрузчик модели с SHA и resume | NOT_IMPLEMENTED | G12 | — |
 | G14 — llama.cpp inference | NOT_IMPLEMENTED | G13 | — |
 | G15 — локальные рекомендации с подтверждением | NOT_IMPLEMENTED | G14 | — |
@@ -144,4 +144,19 @@ GREEN: release APK 53.9 MB собран с локальным seed из 34 за�
 - R1: пользовательская задача была ниже экрана из-за длинной шапки; минимизация высоты исправила тест без удаления TodayScreen.
 - R2: quick action совпал по подписи с нижней вкладкой, из-за этого старые таймерные виджет-тесты стали неоднозначными; текст CTA уточнён, тесты прошли.
 
-Следующий шаг: начать G12 с тестов игровых правил и миграции SQLite.
+G12 verification: 55 tests, analyzer, APK build/install passed.
+
+## G12 — игровые правила и хранение
+
+- Статус: GREEN; ожидает commit.
+- Реализация: схема v4 с upgrade v3 и сохранением данных; event XP идемпотентен; уровни, daily/weekly квесты, достижения, личные награды; начисления задач/фокуса/привычек; weekly review; gamification UI; резервная копия v2 с import v1.
+- RED: отсутствовала `xp_events` в v3; новый streak тест выявил, что сегодняшняя отметка давала 0 до конца дня; widget тест выявил disposed controller в add reward. Все исправлены.
+- Verification: `flutter test` 55 PASS; `flutter analyze` no issues; `git diff --check` PASS; `flutter build apk --debug` PASS; debug APK установлен и приложение запущено на эмулятор Android 25.
+- Ограничение проверки UI: переход из эмуляторной accessibility tap не подтвердился; widget тест проходит. Повторить на финальной сборке устройстве.
+- Следом: начать G13 с manifest, resume/range downloader, SHA verification, verified storage и тестов.
+
+## G13 — менеджер модели
+
+- Статус: NOT_IMPLEMENTED; следующая цель по плану.
+- Критерии: закреплённые URL/SHA/size; streaming progress; pause/resume; сохранение частичной загрузки; проверка hash; не скачивать повторно проверенную модель; возможность удалить; offline состояние.
+- Следующий шаг: тесты manifest и загрузчика на фейковом transport и file store; затем реализация минимального model layer.

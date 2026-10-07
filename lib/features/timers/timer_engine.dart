@@ -1,6 +1,7 @@
 import 'package:uuid/uuid.dart';
 
 import '../../core/models.dart';
+import '../gamification/gamification_service.dart';
 import 'timer_repository.dart';
 
 enum TimerKind { focus, recovery, delay }
@@ -127,6 +128,10 @@ class TimerEngine {
         elapsedSeconds: session.durationSeconds,
       );
       await repository.save(completed);
+      if (session.kind == TimerKind.focus.name) {
+        await GamificationService(repository.database)
+            .awardFocusSession(session.id, occurredAt: _now());
+      }
       await repository.database.remindersChanged();
       return completed;
     }
@@ -147,6 +152,10 @@ class TimerEngine {
         remainingSeconds: left,
       ),
     );
+    if (session.kind == TimerKind.focus.name) {
+      await GamificationService(repository.database)
+          .awardFocusSession(session.id, occurredAt: _now());
+    }
     await repository.database.remindersChanged();
   }
 
@@ -182,6 +191,10 @@ class TimerEngine {
         elapsedSeconds: session.durationSeconds - left,
       ),
     );
+    if (session.kind == TimerKind.focus.name) {
+      await GamificationService(repository.database)
+          .awardFocusSession(session.id, occurredAt: _now());
+    }
     await repository.database.remindersChanged();
   }
 

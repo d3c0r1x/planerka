@@ -19,7 +19,7 @@ class BackupService {
   final DateTime Function() _now;
   final String Function() _newId;
 
-  static const userTables = [
+  static const legacyUserTables = [
     'goals',
     'projects',
     'tasks',
@@ -30,13 +30,21 @@ class BackupService {
     'timer_settings',
   ];
 
+  static const userTables = [
+    ...legacyUserTables,
+    'xp_events',
+    'game_quests',
+    'game_achievements',
+    'custom_rewards',
+  ];
+
   Future<String> exportJson() async {
     final tables = <String, List<Map<String, Object?>>>{};
     for (final table in userTables) {
       tables[table] = await database.database.query(table);
     }
     return const JsonEncoder.withIndent('  ').convert({
-      'version': 1,
+      'version': 2,
       'exportedAt': _now().toUtc().toIso8601String(),
       'tables': tables,
     });
@@ -44,17 +52,21 @@ class BackupService {
 
   Future<void> importJson(String json, {required ImportMode mode}) async {
     final decoded = jsonDecode(json);
-    if (decoded is! Map<String, dynamic> || decoded['version'] != 1) {
+    if (decoded is! Map<String, dynamic> ||
+        decoded['version'] != 1 && decoded['version'] != 2) {
       throw const FormatException('Неподдерживаемый формат резервной копии');
     }
+    final version = decoded['version'] as int;
     final rawTables = decoded['tables'];
     if (rawTables is! Map<String, dynamic> ||
-        userTables.any((table) => !rawTables.containsKey(table))) {
+        (version == 1 ? legacyUserTables : userTables).any(
+          (table) => !rawTables.containsKey(table),
+        )) {
       throw const FormatException('В резервной копии отсутствуют таблицы');
     }
     final tables = <String, List<Map<String, Object?>>>{};
     for (final table in userTables) {
-      final rows = rawTables[table];
+      final rows = rawTables[table] ?? (version == 1 ? <Object>[] : null);
       if (rows is! List || rows.any((row) => row is! Map)) {
         throw FormatException('Некорректные данные таблицы $table');
       }

@@ -10,6 +10,8 @@ import 'features/inbox/inbox_repository.dart';
 import 'features/inbox/inbox_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/goals/goals_screen.dart';
+import 'features/gamification/gamification_screen.dart';
+import 'features/gamification/gamification_service.dart';
 import 'features/backup/backup_screen.dart';
 import 'features/backup/backup_service.dart';
 import 'features/planning/calendar_screen.dart';
@@ -27,10 +29,16 @@ import 'features/wellbeing/journal_screen.dart';
 import 'features/wellbeing/wellbeing_repository.dart';
 
 class PlanerkaApp extends StatefulWidget {
-  const PlanerkaApp({super.key, this.database, this.notificationPort});
+  const PlanerkaApp({
+    super.key,
+    this.database,
+    this.notificationPort,
+    this.gamificationDataSource,
+  });
 
   final AppDatabase? database;
   final NotificationPort? notificationPort;
+  final GamificationDataSource? gamificationDataSource;
 
   @override
   State<PlanerkaApp> createState() => _PlanerkaAppState();
@@ -193,6 +201,21 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                 PopupMenuItem(value: 'dark', child: Text('Тёмная тема')),
               ],
             ),
+            if (_tab == 3 && widget.database != null)
+              IconButton(
+                tooltip: 'Игровой прогресс',
+                icon: const Icon(Icons.emoji_events_outlined),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => GamificationScreen(
+                      service:
+                          widget.gamificationDataSource ??
+                          GamificationService(widget.database!),
+                    ),
+                  ),
+                ),
+              ),
             if (_tab == 0 && widget.database != null) ...[
               Builder(
                 builder: (context) => IconButton(
