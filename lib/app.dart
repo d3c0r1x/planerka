@@ -3,6 +3,11 @@ import 'package:flutter/material.dart';
 import 'core/app_database.dart';
 import 'features/inbox/inbox_repository.dart';
 import 'features/inbox/inbox_screen.dart';
+import 'features/goals/goals_screen.dart';
+import 'features/planning/calendar_screen.dart';
+import 'features/planning/planning_repository.dart';
+import 'features/planning/projects_screen.dart';
+import 'features/planning/today_screen.dart';
 
 class PlanerkaApp extends StatefulWidget {
   const PlanerkaApp({super.key, this.database});
@@ -76,9 +81,61 @@ class _PlanerkaAppState extends State<PlanerkaApp> {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF5263D8)),
       ),
       home: Scaffold(
-        appBar: AppBar(title: Text(_tab == 0 ? 'Планерка' : 'Inbox')),
+        appBar: AppBar(
+          title: Text(_tab == 0 ? 'Планерка' : 'Inbox'),
+          actions: _tab == 0 && widget.database != null
+              ? [
+                  Builder(
+                    builder: (context) => IconButton(
+                      tooltip: 'Календарь',
+                      icon: const Icon(Icons.calendar_month_rounded),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => CalendarScreen(
+                            repository: PlanningRepository(widget.database!),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Builder(
+                    builder: (context) => IconButton(
+                      tooltip: 'Проекты',
+                      icon: const Icon(Icons.folder_outlined),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => ProjectsScreen(
+                            repository: PlanningRepository(widget.database!),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Builder(
+                    builder: (context) => IconButton(
+                      tooltip: 'Цели',
+                      icon: const Icon(Icons.flag_outlined),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => GoalsScreen(
+                            repository: PlanningRepository(widget.database!),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ]
+              : null,
+        ),
         body: _tab == 0
-            ? const Center(child: Text('Ваш день начинается здесь'))
+            ? widget.database == null
+                  ? const Center(child: Text('Ваш день начинается здесь'))
+                  : TodayScreen(
+                      repository: PlanningRepository(widget.database!),
+                    )
             : widget.database == null
             ? const Center(child: Text('Данные недоступны'))
             : InboxScreen(

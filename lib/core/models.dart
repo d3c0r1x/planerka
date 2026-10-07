@@ -71,3 +71,27 @@ class TimerSession {
     outcome: map['outcome'] as String?,
   );
 }
+
+class Project {
+  const Project({required this.id, required this.title, this.goalId});
+
+  final String id;
+  final String title;
+  final String? goalId;
+}
+
+class Goal {
+  const Goal({
+    required this.id,
+    required this.title,
+    required this.progress,
+    this.target,
+    this.unit = '',
+  });
+
+  final String id;
+  final String title;
+  final double progress;
+  final double? target;
+  final String unit;
+}
