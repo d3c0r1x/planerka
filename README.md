@@ -1,17 +1,28 @@
-# planerka
+# Планерка
 
-A new Flutter project.
+Android-планировщик для выгрузки задач, планирования дня, фокус-сессий и привычек. Данные хранятся локально на устройстве.
 
-## Getting Started
+## Возможности
 
-This project is a starting point for a Flutter application.
+- Inbox с быстрым добавлением и разбором задач.
+- План дня, календарь, сроки, проекты и цели.
+- Фокус-таймер, восстановление, дыхание и отсрочка импульсивных действий.
+- Локальные напоминания, привычки, эмоциональный дневник и статистика.
+- Экспорт и восстановление JSON-копии; светлая, тёмная и системная темы.
 
-A few resources to get you started if this is your first Flutter project:
+## Разработка
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+Требуются Flutter SDK, Android SDK и JDK 17.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```sh
+flutter pub get
+flutter test
+flutter analyze
+flutter build apk --release
+```
+
+APK появится в `build/app/outputs/flutter-apk/app-release.apk`.
+
+## Локальные личные задачи
+
+Для личной сборки можно создать приватный JSON-файл компиляции из локального Markdown-плана и передать его Flutter через `--dart-define-from-file`. Каталог `private/` игнорируется Git; исходный план и персональные данные не входят в этот репозиторий. Публичную сборку следует собирать без приватного define.

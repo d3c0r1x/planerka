@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:sqflite_common/sqlite_api.dart';
 
 import 'core/app_database.dart';
+import 'core/app_theme.dart';
 import 'features/inbox/inbox_repository.dart';
 import 'features/inbox/inbox_screen.dart';
 import 'features/goals/goals_screen.dart';
@@ -25,9 +27,10 @@ import 'features/wellbeing/journal_screen.dart';
 import 'features/wellbeing/wellbeing_repository.dart';
 
 class PlanerkaApp extends StatefulWidget {
-  const PlanerkaApp({super.key, this.database});
+  const PlanerkaApp({super.key, this.database, this.notificationPort});
 
   final AppDatabase? database;
+  final NotificationPort? notificationPort;
 
   @override
   State<PlanerkaApp> createState() => _PlanerkaAppState();
@@ -37,6 +40,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
   int _tab = 0;
   int _inboxVersion = 0;
   ReminderService? _reminders;
+  ThemeMode _themeMode = ThemeMode.system;
 
   @override
   void initState() {
@@ -44,12 +48,37 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     final database = widget.database;
     if (database != null) {
-      _reminders = ReminderService(database, LocalNotificationPort());
+      unawaited(_loadThemeMode());
+      _reminders = ReminderService(
+        database,
+        widget.notificationPort ?? LocalNotificationPort(),
+      );
       database.onRemindersChanged = _syncReminders;
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => unawaited(_syncReminders()),
       );
     }
+  }
+
+  Future<void> _loadThemeMode() async {
+    final rows = await widget.database!.database.query(
+      'app_metadata',
+      where: 'key = ?',
+      whereArgs: ['theme_mode'],
+    );
+    if (!mounted || rows.isEmpty) return;
+    final value = rows.single['value'] as String;
+    for (final mode in ThemeMode.values) {
+      if (mode.name == value) setState(() => _themeMode = mode);
+    }
+  }
+
+  Future<void> _setThemeMode(ThemeMode mode) async {
+    setState(() => _themeMode = mode);
+    await widget.database?.database.insert('app_metadata', {
+      'key': 'theme_mode',
+      'value': mode.name,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> _syncReminders() async {
@@ -133,10 +162,9 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF5263D8)),
-      ),
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: _themeMode,
       home: Scaffold(
         appBar: AppBar(
           title: Text(switch (_tab) {
@@ -145,81 +173,100 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
             2 => 'Фокус',
             _ => 'Прогресс',
           }),
-          actions: _tab == 0 && widget.database != null
-              ? [
-                  Builder(
-                    builder: (context) => IconButton(
-                      tooltip: 'Календарь',
-                      icon: const Icon(Icons.calendar_month_rounded),
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute<void>(
-                          builder: (_) => CalendarScreen(
-                            repository: PlanningRepository(widget.database!),
-                          ),
-                        ),
+          actions: [
+            PopupMenuButton<String>(
+              tooltip: 'Тема',
+              icon: const Icon(Icons.palette_outlined),
+              onSelected: (value) {
+                final mode = ThemeMode.values.firstWhere(
+                  (item) => item.name == value,
+                );
+                unawaited(_setThemeMode(mode));
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(enabled: false, child: Text('Цветовая тема')),
+                PopupMenuItem(
+                  value: 'system',
+                  child: Text('Как на устройстве'),
+                ),
+                PopupMenuItem(value: 'light', child: Text('Светлая тема')),
+                PopupMenuItem(value: 'dark', child: Text('Тёмная тема')),
+              ],
+            ),
+            if (_tab == 0 && widget.database != null) ...[
+              Builder(
+                builder: (context) => IconButton(
+                  tooltip: 'Календарь',
+                  icon: const Icon(Icons.calendar_month_rounded),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => CalendarScreen(
+                        repository: PlanningRepository(widget.database!),
                       ),
                     ),
                   ),
-                  Builder(
-                    builder: (context) => IconButton(
-                      tooltip: 'Проекты',
-                      icon: const Icon(Icons.folder_outlined),
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute<void>(
-                          builder: (_) => ProjectsScreen(
-                            repository: PlanningRepository(widget.database!),
-                          ),
-                        ),
+                ),
+              ),
+              Builder(
+                builder: (context) => IconButton(
+                  tooltip: 'Проекты',
+                  icon: const Icon(Icons.folder_outlined),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => ProjectsScreen(
+                        repository: PlanningRepository(widget.database!),
                       ),
                     ),
                   ),
-                  Builder(
-                    builder: (context) => IconButton(
-                      tooltip: 'Цели',
-                      icon: const Icon(Icons.flag_outlined),
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute<void>(
-                          builder: (_) => GoalsScreen(
-                            repository: PlanningRepository(widget.database!),
-                          ),
-                        ),
+                ),
+              ),
+              Builder(
+                builder: (context) => IconButton(
+                  tooltip: 'Цели',
+                  icon: const Icon(Icons.flag_outlined),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => GoalsScreen(
+                        repository: PlanningRepository(widget.database!),
                       ),
                     ),
                   ),
-                  Builder(
-                    builder: (context) => PopupMenuButton<String>(
-                      tooltip: 'Ещё',
-                      onSelected: (value) => Navigator.push(
-                        context,
-                        MaterialPageRoute<void>(
-                          builder: (_) => switch (value) {
-                            'habits' => HabitsScreen(
-                              repository: WellbeingRepository(widget.database!),
-                            ),
-                            'journal' => JournalScreen(
-                              repository: WellbeingRepository(widget.database!),
-                            ),
-                            _ => BackupScreen(
-                              service: BackupService(widget.database!),
-                            ),
-                          },
+                ),
+              ),
+              Builder(
+                builder: (context) => PopupMenuButton<String>(
+                  tooltip: 'Ещё',
+                  onSelected: (value) => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => switch (value) {
+                        'habits' => HabitsScreen(
+                          repository: WellbeingRepository(widget.database!),
                         ),
-                      ),
-                      itemBuilder: (context) => const [
-                        PopupMenuItem(value: 'habits', child: Text('Привычки')),
-                        PopupMenuItem(value: 'journal', child: Text('Дневник')),
-                        PopupMenuItem(
-                          value: 'backup',
-                          child: Text('Резервная копия'),
+                        'journal' => JournalScreen(
+                          repository: WellbeingRepository(widget.database!),
                         ),
-                      ],
+                        _ => BackupScreen(
+                          service: BackupService(widget.database!),
+                        ),
+                      },
                     ),
                   ),
-                ]
-              : null,
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: 'habits', child: Text('Привычки')),
+                    PopupMenuItem(value: 'journal', child: Text('Дневник')),
+                    PopupMenuItem(
+                      value: 'backup',
+                      child: Text('Резервная копия'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
         ),
         body: widget.database == null
             ? const Center(child: Text('Ваш день начинается здесь'))
