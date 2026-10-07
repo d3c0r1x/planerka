@@ -13,7 +13,11 @@ Android-планировщик для выгрузки задач, планир�
 
 ## Разработка
 
-Требуются Flutter SDK, Android SDK и JDK 17.
+Требуются Flutter SDK, Android SDK и JDK 17. Для сборки llama.cpp клонируй репозиторий с submodule:
+
+```sh
+git clone --recurse-submodules https://github.com/d3c0r1x/planerka.git
+```
 
 ```sh
 flutter pub get
