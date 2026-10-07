@@ -1,0 +1,21 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(planerka_llama LANGUAGES C CXX)
+
+set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_APP OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_COMMON OFF CACHE BOOL "" FORCE)
+set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
+set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
+set(LLAMA_OPENSSL OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+
+set(LLAMA_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../third_party/llama.cpp")
+add_subdirectory("${LLAMA_SOURCE_DIR}" llama.cpp)
+
+add_library(planerka_llama SHARED llama_bridge.cpp)
+target_include_directories(planerka_llama PRIVATE "${LLAMA_SOURCE_DIR}/include")
+target_link_libraries(planerka_llama PRIVATE llama android log)

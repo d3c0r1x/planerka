@@ -7,11 +7,21 @@ import 'package:path_provider/path_provider.dart';
 import 'model_downloader.dart';
 import 'model_manifest.dart';
 import 'model_store.dart';
+import 'local_ai_engine.dart';
+import 'local_ai_screen.dart';
+import '../../../core/app_database.dart';
+import '../planning/ai_recommendation_service.dart';
 
 class ModelScreen extends StatefulWidget {
-  const ModelScreen({super.key, this.downloader, this.modelStore});
+  const ModelScreen({
+    super.key,
+    this.downloader,
+    this.modelStore,
+    this.database,
+  });
   final ModelDownloader? downloader;
   final ModelStore? modelStore;
+  final AppDatabase? database;
 
   @override
   State<ModelScreen> createState() => _ModelScreenState();
@@ -181,10 +191,40 @@ class _ModelScreenState extends State<ModelScreen> {
                           ),
                         const SizedBox(height: 12),
                         if (ready)
-                          FilledButton.icon(
-                            onPressed: _remove,
-                            icon: const Icon(Icons.delete_outline),
-                            label: const Text('Удалить модель'),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              FilledButton.icon(
+                                onPressed: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => LocalAiScreen(
+                                      engine: LocalAiEngine(
+                                        store: _store!,
+                                        manifest: Qwen3ModelManifest.manifest,
+                                      ),
+                                      recommendations: widget.database == null
+                                          ? null
+                                          : AiRecommendationService(
+                                              widget.database!,
+                                              LocalAiEngine(
+                                                store: _store!,
+                                                manifest:
+                                                    Qwen3ModelManifest.manifest,
+                                              ),
+                                            ),
+                                    ),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.auto_awesome_rounded),
+                                label: const Text('Открыть помощника'),
+                              ),
+                              TextButton.icon(
+                                onPressed: _remove,
+                                icon: const Icon(Icons.delete_outline),
+                                label: const Text('Удалить модель'),
+                              ),
+                            ],
                           )
                         else if (downloading)
                           OutlinedButton.icon(

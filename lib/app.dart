@@ -273,7 +273,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                         'journal' => JournalScreen(
                           repository: WellbeingRepository(widget.database!),
                         ),
-                        'model' => const ModelScreen(),
+                        'model' => ModelScreen(database: widget.database),
                         _ => BackupScreen(
                           service: BackupService(widget.database!),
                         ),

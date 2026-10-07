@@ -13,6 +13,7 @@ abstract interface class ModelFileStore {
     bool append = true,
   });
   Future<bool> installedExists(String fileName);
+  String installedPath(String fileName);
   Stream<List<int>> readInstalled(String fileName);
   Future<void> install(String fileName);
   Future<void> delete(String fileName);
@@ -30,7 +31,7 @@ class ModelStore {
         manifest.sha256) {
       return null;
     }
-    return manifest.fileName;
+    return files.installedPath(manifest.fileName);
   }
 
   Future<bool> installPartial(ModelManifest manifest) async {
@@ -88,6 +89,9 @@ class LocalModelFileStore implements ModelFileStore {
       _installed(fileName).exists();
 
   @override
+  String installedPath(String fileName) => _installed(fileName).path;
+
+  @override
   Stream<List<int>> readInstalled(String fileName) async* {
     final file = _installed(fileName);
     if (await file.exists()) yield* file.openRead();
@@ -124,6 +128,8 @@ class MemoryModelFileStore implements ModelFileStore {
 
   @override
   Future<bool> installedExists(String fileName) async => installed != null;
+  @override
+  String installedPath(String fileName) => 'memory://$fileName';
   @override
   Stream<List<int>> readInstalled(String fileName) async* {
     if (installed != null) yield [...installed!];

@@ -120,9 +120,9 @@ GREEN: release APK 53.9 MB собран с локальным seed из 34 за�
 | G11 — тёмная тема и главная панель с реальными привычками/серией | COMPLETE | — | a3b5acf |
 | G12 — опыт, серии, квесты, достижения | COMPLETE | G11 | e3a9951 |
 | G13 — загрузчик модели с SHA и resume | COMPLETE | G12 | 5859f86 |
-| G14 — llama.cpp inference | NOT_IMPLEMENTED | G13 | — |
-| G15 — локальные рекомендации с подтверждением | NOT_IMPLEMENTED | G14 | — |
-| G16 — APK, приватность, публикация | NOT_IMPLEMENTED | G15 | — |
+| G14 — llama.cpp inference | PARTIAL | G13 | — |
+| G15 — локальные рекомендации с подтверждением | GREEN | G14 | pending |
+| G16 — APK, приватность, публикация | PARTIAL | G15 | pending |
 
 ### Baseline и G11
 
@@ -164,3 +164,26 @@ G12 verification: 55 tests, analyzer, APK build/install passed.
 - Android: debug APK built/installed/launched; model screen opened from Home menu and verified via screenshot/accessibility. No model download performed.
 - Ограничение: реальные 484 MB не скачивались; transfer, pause, resume and hash checks covered by fake transport tests.
 - Следом: targeted tests for pause/cancel, move to G14 native feasibility spike.
+
+## G14 — llama.cpp local inference
+
+- Статус: PARTIAL; native compilation and app bridge are implemented, device inference needs target-device validation.
+- Upstream `ggml-org/llama.cpp` pinned at v0.6.0 / `d81235049384534c167caea52b85a694f6103d14` as submodule. Android arm64 CMake build uses CPU backend, native code excluded from APK model payload.
+- JNI bridge: verified model path only, local CPU, chat template, 4096 context, bounded input/output, cancellation, model load/unload; Dart applies 2-minute timeout.
+- Tests: 3 engine tests for verified-file gate, native bridge call, and timeout/cancel.
+- Current verification: `flutter analyze` clean; full `flutter test` PASS, 81 tests at initial G15 regression; after icon/configuration update analyzer clean and test run reached +65 with overall tool exit success (test command completed PASS; 81 then was the last explicitly observed full-suite total). `flutter build apk --release --target-platform android-arm64` PASS.
+- APK inspection: package com.planerka.mobile, min SDK 28, native arm64 libraries included, GGUF absent. Device emulator is API25 x86_64; install rejected for ABI mismatch. No API28+ arm64 emulator or physical target phone connected. Model download and actual on-device inference/latency/RAM remain unverified.
+
+## G15 — local recommendations with explicit confirmation
+
+- Статус: GREEN; pending commit.
+- Context contains at most 50 active tasks, 10 goals and 7 recent diary entries. Mood diary is included by default per user preference and can be disabled in the assistant screen. Values are length-limited.
+- Model response must be valid JSON with <=5 existing unique task IDs and non-past ISO dates. Screen presents an editable selection with all items initially unchecked. Nothing changes until user presses Apply; selected changes execute in one transaction and stale tasks abort atomically. Closing/cancel has no writes. No recommendation history is stored.
+- Verification: AI-specific recommendation/model tests passed; full regression passed; analyzer clean. APK build includes this code.
+
+## G16 — release APK, privacy and publication
+
+- Статус: PARTIAL; release built and privacy gate reviewed; commits/push still need recording.
+- Custom Android launcher/adaptive icons generated from existing brand art. APK copied to `C:\Users\d3c0r\Desktop\Планерка\Планерка-v2-arm64.apk`, 38,001,765 bytes, SHA-256 `7BE339037F85D27B710C77173CAFD0D2E9DC1868A6836497F5DEEB71CB77FACF`.
+- `private/` personal seed is ignored by Git and absent from tracked paths. Public code contains no personalised task data or exact target-phone model. The 484MB model is not in the APK. llama.cpp submodule source/pin is public-safe.
+- Release uses Gradle's existing debug signing config. Suitable for manual install, not Play Store publishing/updates under a persistent signing key. Physical target-device smoke test remains outstanding due no compatible connected hardware/emulator.
