@@ -46,6 +46,7 @@ class InboxRepository {
       whereArgs: [id],
     );
     if (count == 0) throw StateError('Запись не найдена');
+    await database.remindersChanged();
     final rows = await database.database.query(
       'tasks',
       where: 'id = ?',
@@ -56,6 +57,7 @@ class InboxRepository {
 
   Future<void> delete(String id) async {
     await database.database.delete('tasks', where: 'id = ?', whereArgs: [id]);
+    await database.remindersChanged();
   }
 
   Future<List<TaskEntry>> listUnsorted() async {
@@ -101,5 +103,6 @@ class InboxRepository {
         whereArgs: [id],
       );
     });
+    await database.remindersChanged();
   }
 }

@@ -28,6 +28,7 @@ class PlanningRepository {
       where: 'id = ?',
       whereArgs: [taskId],
     );
+    await database.remindersChanged();
   }
 
   Future<void> setToday(String taskId, DateTime date) async {
@@ -50,6 +51,7 @@ class PlanningRepository {
       where: 'id = ?',
       whereArgs: [taskId],
     );
+    await database.remindersChanged();
   }
 
   Future<List<TaskEntry>> listForDay(DateTime date) async {

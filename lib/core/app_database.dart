@@ -5,6 +5,9 @@ class AppDatabase {
   AppDatabase(this.database);
 
   final Database database;
+  Future<void> Function()? onRemindersChanged;
+
+  Future<void> remindersChanged() async => await onRemindersChanged?.call();
 
   static Future<AppDatabase> open(
     String path, {

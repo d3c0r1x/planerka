@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'core/app_database.dart';
@@ -8,6 +10,8 @@ import 'features/planning/calendar_screen.dart';
 import 'features/planning/planning_repository.dart';
 import 'features/planning/projects_screen.dart';
 import 'features/planning/today_screen.dart';
+import 'features/reminders/local_notification_port.dart';
+import 'features/reminders/reminder_service.dart';
 import 'features/timers/focus_screen.dart';
 import 'features/timers/timer_engine.dart';
 import 'features/timers/timer_repository.dart';
@@ -21,9 +25,44 @@ class PlanerkaApp extends StatefulWidget {
   State<PlanerkaApp> createState() => _PlanerkaAppState();
 }
 
-class _PlanerkaAppState extends State<PlanerkaApp> {
+class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
   int _tab = 0;
   int _inboxVersion = 0;
+  ReminderService? _reminders;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final database = widget.database;
+    if (database != null) {
+      _reminders = ReminderService(database, LocalNotificationPort());
+      database.onRemindersChanged = _syncReminders;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => unawaited(_syncReminders()),
+      );
+    }
+  }
+
+  Future<void> _syncReminders() async {
+    try {
+      await _reminders?.rescheduleAll();
+    } catch (error) {
+      debugPrint('Reminder scheduling failed: $error');
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_syncReminders());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    widget.database?.onRemindersChanged = null;
+    super.dispose();
+  }
 
   Future<void> _add(BuildContext dialogContext) async {
     final database = widget.database;

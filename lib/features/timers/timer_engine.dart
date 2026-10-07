@@ -68,6 +68,7 @@ class TimerEngine {
       status: 'running',
     );
     await repository.create(session);
+    await repository.database.remindersChanged();
     return session;
   }
 
@@ -126,6 +127,7 @@ class TimerEngine {
         elapsedSeconds: session.durationSeconds,
       );
       await repository.save(completed);
+      await repository.database.remindersChanged();
       return completed;
     }
     return session;
@@ -145,6 +147,7 @@ class TimerEngine {
         remainingSeconds: left,
       ),
     );
+    await repository.database.remindersChanged();
   }
 
   Future<void> resume() async {
@@ -161,6 +164,7 @@ class TimerEngine {
         remainingSeconds: left,
       ),
     );
+    await repository.database.remindersChanged();
   }
 
   Future<void> finish({String? outcome}) async {
@@ -178,6 +182,7 @@ class TimerEngine {
         elapsedSeconds: session.durationSeconds - left,
       ),
     );
+    await repository.database.remindersChanged();
   }
 
   Future<Duration> recommended(TimerKind kind) async {
