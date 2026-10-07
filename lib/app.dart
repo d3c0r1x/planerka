@@ -15,6 +15,9 @@ import 'features/reminders/reminder_service.dart';
 import 'features/timers/focus_screen.dart';
 import 'features/timers/timer_engine.dart';
 import 'features/timers/timer_repository.dart';
+import 'features/wellbeing/habits_screen.dart';
+import 'features/wellbeing/journal_screen.dart';
+import 'features/wellbeing/wellbeing_repository.dart';
 
 class PlanerkaApp extends StatefulWidget {
   const PlanerkaApp({super.key, this.database});
@@ -171,6 +174,31 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                           ),
                         ),
                       ),
+                    ),
+                  ),
+                  Builder(
+                    builder: (context) => PopupMenuButton<String>(
+                      tooltip: 'Ещё',
+                      onSelected: (value) => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => value == 'habits'
+                              ? HabitsScreen(
+                                  repository: WellbeingRepository(
+                                    widget.database!,
+                                  ),
+                                )
+                              : JournalScreen(
+                                  repository: WellbeingRepository(
+                                    widget.database!,
+                                  ),
+                                ),
+                        ),
+                      ),
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(value: 'habits', child: Text('Привычки')),
+                        PopupMenuItem(value: 'journal', child: Text('Дневник')),
+                      ],
                     ),
                   ),
                 ]
