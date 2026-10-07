@@ -6,6 +6,8 @@ import 'package:path/path.dart' as p;
 import 'package:planerka/app.dart';
 import 'package:planerka/core/app_database.dart';
 import 'package:planerka/features/inbox/inbox_repository.dart';
+import 'package:planerka/features/review/review_service.dart';
+import 'package:planerka/features/review/progress_screen.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
@@ -54,6 +56,20 @@ void main() {
       whereArgs: [task.id],
     );
     expect(completed.single['status'], 'completed');
+  });
+
+  testWidgets('progress screen switches between day and week', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ProgressScreen(service: ReviewService(database))),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Выполнено задач'), findsOneWidget);
+    await tester.tap(find.text('Неделя'));
+    await tester.pumpAndSettle();
+    expect(find.text('Отметки привычек'), findsOneWidget);
+    expect(find.textContaining(' — '), findsOneWidget);
   });
 
   testWidgets('calendar is reachable from Today', (tester) async {

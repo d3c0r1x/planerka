@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/app_database.dart';
 import 'features/inbox/inbox_repository.dart';
@@ -12,6 +13,8 @@ import 'features/planning/projects_screen.dart';
 import 'features/planning/today_screen.dart';
 import 'features/reminders/local_notification_port.dart';
 import 'features/reminders/reminder_service.dart';
+import 'features/review/progress_screen.dart';
+import 'features/review/review_service.dart';
 import 'features/timers/focus_screen.dart';
 import 'features/timers/timer_engine.dart';
 import 'features/timers/timer_repository.dart';
@@ -50,8 +53,8 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
   Future<void> _syncReminders() async {
     try {
       await _reminders?.rescheduleAll();
-    } catch (error) {
-      debugPrint('Reminder scheduling failed: $error');
+    } catch (_) {
+      // Task and timer operations remain available if Android blocks reminders.
     }
   }
 
@@ -121,6 +124,13 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
     return MaterialApp(
       title: 'Планерка',
       debugShowCheckedModeBanner: false,
+      locale: const Locale('ru'),
+      supportedLocales: const [Locale('ru'), Locale('en')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF5263D8)),
@@ -130,7 +140,8 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
           title: Text(switch (_tab) {
             0 => 'Планерка',
             1 => 'Inbox',
-            _ => 'Фокус',
+            2 => 'Фокус',
+            _ => 'Прогресс',
           }),
           actions: _tab == 0 && widget.database != null
               ? [
@@ -214,10 +225,11 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                   key: ValueKey(_inboxVersion),
                   repository: InboxRepository(widget.database!),
                 ),
-                _ => FocusScreen(
+                2 => FocusScreen(
                   engine: TimerEngine(TimerRepository(widget.database!)),
                   planning: PlanningRepository(widget.database!),
                 ),
+                _ => ProgressScreen(service: ReviewService(widget.database!)),
               },
         bottomNavigationBar: NavigationBar(
           selectedIndex: _tab,
@@ -235,9 +247,13 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
               icon: Icon(Icons.timer_outlined),
               label: 'Фокус',
             ),
+            NavigationDestination(
+              icon: Icon(Icons.insights_rounded),
+              label: 'Прогресс',
+            ),
           ],
         ),
-        floatingActionButton: _tab == 2
+        floatingActionButton: _tab >= 2
             ? null
             : Builder(
                 builder: (context) => FloatingActionButton(
