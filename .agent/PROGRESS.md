@@ -118,8 +118,8 @@ GREEN: release APK 53.9 MB собран с локальным seed из 34 за�
 | Цель | Состояние | Зависимость | Коммит |
 | --- | --- | --- | --- |
 | G11 — тёмная тема и главная панель с реальными привычками/серией | COMPLETE | — | a3b5acf |
-| G12 — опыт, серии, квесты, достижения | COMPLETE | G11 | pending commit |
-| G13 — загрузчик модели с SHA и resume | NOT_IMPLEMENTED | G12 | — |
+| G12 — опыт, серии, квесты, достижения | COMPLETE | G11 | e3a9951 |
+| G13 — загрузчик модели с SHA и resume | COMPLETE | G12 | pending commit |
 | G14 — llama.cpp inference | NOT_IMPLEMENTED | G13 | — |
 | G15 — локальные рекомендации с подтверждением | NOT_IMPLEMENTED | G14 | — |
 | G16 — APK, приватность, публикация | NOT_IMPLEMENTED | G15 | — |
@@ -157,6 +157,10 @@ G12 verification: 55 tests, analyzer, APK build/install passed.
 
 ## G13 — менеджер модели
 
-- Статус: NOT_IMPLEMENTED; следующая цель по плану.
-- Критерии: закреплённые URL/SHA/size; streaming progress; pause/resume; сохранение частичной загрузки; проверка hash; не скачивать повторно проверенную модель; возможность удалить; offline состояние.
-- Следующий шаг: тесты manifest и загрузчика на фейковом transport и file store; затем реализация минимального model layer.
+- Статус: GREEN; implementation and emulator screen verified; commit pending.
+- RED: целевые тесты не собирались, пока отсутствовали ModelManifest/ModelStore/ModelDownloader.
+- Реализация: закреплены Hugging Face QuantFactory URL, точный размер 484220000 bytes и SHA-256; приватный app support/models; потоковая SHA без чтения 484 MB в память; атомарный rename `.part`; Range resume, сброс offset при HTTP 200, прогресс, пауза, ошибка сети с сохранением partial, hash/size gate, удаление, reuse verified model; экран с источником, размером, офлайн пояснением и кнопками.
+- Tests: 10 AI-specific/widget tests (manifest, correct SHA, corruption, Range 206, ignored Range 200, interrupted stream resume, mismatch, reuse/delete, visible screen). Full regression: 65 PASS; `flutter analyze` clean; `git diff --check` PASS.
+- Android: debug APK built/installed/launched; model screen opened from Home menu and verified via screenshot/accessibility. No model download performed.
+- Ограничение: реальные 484 MB не скачивались; transfer, pause, resume and hash checks covered by fake transport tests.
+- Следом: targeted tests for pause/cancel, then commit and move to G14 native feasibility spike.

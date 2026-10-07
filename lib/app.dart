@@ -12,6 +12,7 @@ import 'features/home/home_screen.dart';
 import 'features/goals/goals_screen.dart';
 import 'features/gamification/gamification_screen.dart';
 import 'features/gamification/gamification_service.dart';
+import 'features/ai/model/model_screen.dart';
 import 'features/backup/backup_screen.dart';
 import 'features/backup/backup_service.dart';
 import 'features/planning/calendar_screen.dart';
@@ -272,6 +273,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                         'journal' => JournalScreen(
                           repository: WellbeingRepository(widget.database!),
                         ),
+                        'model' => const ModelScreen(),
                         _ => BackupScreen(
                           service: BackupService(widget.database!),
                         ),
@@ -281,6 +283,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                   itemBuilder: (context) => const [
                     PopupMenuItem(value: 'habits', child: Text('Привычки')),
                     PopupMenuItem(value: 'journal', child: Text('Дневник')),
+                    PopupMenuItem(value: 'model', child: Text('Локальный ИИ')),
                     PopupMenuItem(
                       value: 'backup',
                       child: Text('Резервная копия'),
