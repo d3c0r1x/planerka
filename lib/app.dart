@@ -8,13 +8,13 @@ import 'core/app_database.dart';
 import 'core/app_theme.dart';
 import 'features/inbox/inbox_repository.dart';
 import 'features/inbox/inbox_screen.dart';
+import 'features/home/home_screen.dart';
 import 'features/goals/goals_screen.dart';
 import 'features/backup/backup_screen.dart';
 import 'features/backup/backup_service.dart';
 import 'features/planning/calendar_screen.dart';
 import 'features/planning/planning_repository.dart';
 import 'features/planning/projects_screen.dart';
-import 'features/planning/today_screen.dart';
 import 'features/reminders/local_notification_port.dart';
 import 'features/reminders/reminder_service.dart';
 import 'features/review/progress_screen.dart';
@@ -40,7 +40,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
   int _tab = 0;
   int _inboxVersion = 0;
   ReminderService? _reminders;
-  ThemeMode _themeMode = ThemeMode.system;
+  ThemeMode _themeMode = ThemeMode.dark;
 
   @override
   void initState() {
@@ -271,8 +271,27 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
         body: widget.database == null
             ? const Center(child: Text('Ваш день начинается здесь'))
             : switch (_tab) {
-                0 => TodayScreen(
-                  repository: PlanningRepository(widget.database!),
+                0 => HomeScreen(
+                  planning: PlanningRepository(widget.database!),
+                  wellbeing: WellbeingRepository(widget.database!),
+                  onInbox: () => setState(() => _tab = 1),
+                  onFocus: () => setState(() => _tab = 2),
+                  onHabits: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => HabitsScreen(
+                        repository: WellbeingRepository(widget.database!),
+                      ),
+                    ),
+                  ),
+                  onJournal: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => JournalScreen(
+                        repository: WellbeingRepository(widget.database!),
+                      ),
+                    ),
+                  ),
                 ),
                 1 => InboxScreen(
                   key: ValueKey(_inboxVersion),
