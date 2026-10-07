@@ -64,4 +64,53 @@ void main() {
     );
     await db.close();
   });
+
+  test(
+    'opening a v1 database adds timer state without losing sessions',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'planerka_upgrade_',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final path = p.join(directory.path, 'legacy.db');
+      final legacy = await databaseFactoryFfi.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 1,
+          onCreate: (db, _) => db.execute('''
+          CREATE TABLE timer_sessions (
+            id TEXT PRIMARY KEY, kind TEXT NOT NULL, task_id TEXT,
+            duration_seconds INTEGER NOT NULL, started_at TEXT NOT NULL,
+            ended_at TEXT, status TEXT NOT NULL, outcome TEXT
+          )
+        '''),
+        ),
+      );
+      await legacy.insert('timer_sessions', {
+        'id': 'old-session',
+        'kind': 'focus',
+        'duration_seconds': 2700,
+        'started_at': '2026-10-07T12:00:00.000Z',
+        'status': 'completed',
+      });
+      await legacy.close();
+
+      final upgraded = await AppDatabase.open(
+        path,
+        factory: databaseFactoryFfi,
+      );
+      addTearDown(upgraded.close);
+      final columns = await upgraded.database.rawQuery(
+        'PRAGMA table_info(timer_sessions)',
+      );
+      expect(
+        columns.map((column) => column['name']),
+        containsAll(['deadline_at', 'remaining_seconds']),
+      );
+      expect(
+        (await upgraded.database.query('timer_sessions')).single['id'],
+        'old-session',
+      );
+    },
+  );
 }

@@ -44,6 +44,11 @@ class TimerSession {
     required this.startedAt,
     required this.status,
     this.outcome,
+    this.taskId,
+    this.deadlineAt,
+    this.endedAt,
+    this.remainingSeconds,
+    this.elapsedSeconds,
   });
 
   final String id;
@@ -52,6 +57,11 @@ class TimerSession {
   final DateTime startedAt;
   final String status;
   final String? outcome;
+  final String? taskId;
+  final DateTime? deadlineAt;
+  final DateTime? endedAt;
+  final int? remainingSeconds;
+  final int? elapsedSeconds;
 
   Map<String, Object?> toMap() => {
     'id': id,
@@ -60,6 +70,11 @@ class TimerSession {
     'started_at': startedAt.toIso8601String(),
     'status': status,
     'outcome': outcome,
+    'task_id': taskId,
+    'deadline_at': deadlineAt?.toUtc().toIso8601String(),
+    'ended_at': endedAt?.toUtc().toIso8601String(),
+    'remaining_seconds': remainingSeconds,
+    'elapsed_seconds': elapsedSeconds,
   };
 
   factory TimerSession.fromMap(Map<String, Object?> map) => TimerSession(
@@ -69,6 +84,15 @@ class TimerSession {
     startedAt: DateTime.parse(map['started_at'] as String),
     status: map['status'] as String,
     outcome: map['outcome'] as String?,
+    taskId: map['task_id'] as String?,
+    deadlineAt: map['deadline_at'] == null
+        ? null
+        : DateTime.parse(map['deadline_at'] as String),
+    endedAt: map['ended_at'] == null
+        ? null
+        : DateTime.parse(map['ended_at'] as String),
+    remainingSeconds: map['remaining_seconds'] as int?,
+    elapsedSeconds: map['elapsed_seconds'] as int?,
   );
 }
 

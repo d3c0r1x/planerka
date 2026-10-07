@@ -14,7 +14,7 @@ class AppDatabase {
     final database = await source.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 1,
+        version: 2,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: (db, version) async {
           await db.execute('''
@@ -94,9 +94,34 @@ class AppDatabase {
               started_at TEXT NOT NULL,
               ended_at TEXT,
               status TEXT NOT NULL,
-              outcome TEXT
+              outcome TEXT,
+              deadline_at TEXT,
+              remaining_seconds INTEGER,
+              elapsed_seconds INTEGER
             )
           ''');
+          await db.execute('''
+            CREATE TABLE timer_settings (
+              key TEXT PRIMARY KEY,
+              value INTEGER NOT NULL
+            )
+          ''');
+        },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            await db.execute(
+              'ALTER TABLE timer_sessions ADD COLUMN deadline_at TEXT',
+            );
+            await db.execute(
+              'ALTER TABLE timer_sessions ADD COLUMN remaining_seconds INTEGER',
+            );
+            await db.execute(
+              'ALTER TABLE timer_sessions ADD COLUMN elapsed_seconds INTEGER',
+            );
+            await db.execute(
+              'CREATE TABLE timer_settings (key TEXT PRIMARY KEY, value INTEGER NOT NULL)',
+            );
+          }
         },
       ),
     );

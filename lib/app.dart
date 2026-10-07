@@ -8,6 +8,9 @@ import 'features/planning/calendar_screen.dart';
 import 'features/planning/planning_repository.dart';
 import 'features/planning/projects_screen.dart';
 import 'features/planning/today_screen.dart';
+import 'features/timers/focus_screen.dart';
+import 'features/timers/timer_engine.dart';
+import 'features/timers/timer_repository.dart';
 
 class PlanerkaApp extends StatefulWidget {
   const PlanerkaApp({super.key, this.database});
@@ -82,7 +85,11 @@ class _PlanerkaAppState extends State<PlanerkaApp> {
       ),
       home: Scaffold(
         appBar: AppBar(
-          title: Text(_tab == 0 ? 'Планерка' : 'Inbox'),
+          title: Text(switch (_tab) {
+            0 => 'Планерка',
+            1 => 'Inbox',
+            _ => 'Фокус',
+          }),
           actions: _tab == 0 && widget.database != null
               ? [
                   Builder(
@@ -130,18 +137,21 @@ class _PlanerkaAppState extends State<PlanerkaApp> {
                 ]
               : null,
         ),
-        body: _tab == 0
-            ? widget.database == null
-                  ? const Center(child: Text('Ваш день начинается здесь'))
-                  : TodayScreen(
-                      repository: PlanningRepository(widget.database!),
-                    )
-            : widget.database == null
-            ? const Center(child: Text('Данные недоступны'))
-            : InboxScreen(
-                key: ValueKey(_inboxVersion),
-                repository: InboxRepository(widget.database!),
-              ),
+        body: widget.database == null
+            ? const Center(child: Text('Ваш день начинается здесь'))
+            : switch (_tab) {
+                0 => TodayScreen(
+                  repository: PlanningRepository(widget.database!),
+                ),
+                1 => InboxScreen(
+                  key: ValueKey(_inboxVersion),
+                  repository: InboxRepository(widget.database!),
+                ),
+                _ => FocusScreen(
+                  engine: TimerEngine(TimerRepository(widget.database!)),
+                  planning: PlanningRepository(widget.database!),
+                ),
+              },
         bottomNavigationBar: NavigationBar(
           selectedIndex: _tab,
           onDestinationSelected: (index) => setState(() => _tab = index),
@@ -154,15 +164,21 @@ class _PlanerkaAppState extends State<PlanerkaApp> {
               icon: Icon(Icons.inbox_rounded),
               label: 'Inbox',
             ),
+            NavigationDestination(
+              icon: Icon(Icons.timer_outlined),
+              label: 'Фокус',
+            ),
           ],
         ),
-        floatingActionButton: Builder(
-          builder: (context) => FloatingActionButton(
-            onPressed: () => _add(context),
-            tooltip: 'Добавить',
-            child: const Icon(Icons.add_rounded),
-          ),
-        ),
+        floatingActionButton: _tab == 2
+            ? null
+            : Builder(
+                builder: (context) => FloatingActionButton(
+                  onPressed: () => _add(context),
+                  tooltip: 'Добавить',
+                  child: const Icon(Icons.add_rounded),
+                ),
+              ),
       ),
     );
   }
