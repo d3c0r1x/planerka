@@ -17,7 +17,7 @@ class AppDatabase {
     final database = await source.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 2,
+        version: 3,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: (db, version) async {
           await db.execute('''
@@ -109,6 +109,12 @@ class AppDatabase {
               value INTEGER NOT NULL
             )
           ''');
+          await db.execute('''
+            CREATE TABLE app_metadata (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL
+            )
+          ''');
         },
         onUpgrade: (db, oldVersion, newVersion) async {
           if (oldVersion < 2) {
@@ -123,6 +129,11 @@ class AppDatabase {
             );
             await db.execute(
               'CREATE TABLE timer_settings (key TEXT PRIMARY KEY, value INTEGER NOT NULL)',
+            );
+          }
+          if (oldVersion < 3) {
+            await db.execute(
+              'CREATE TABLE app_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
             );
           }
         },

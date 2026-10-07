@@ -7,6 +7,8 @@ import 'core/app_database.dart';
 import 'features/inbox/inbox_repository.dart';
 import 'features/inbox/inbox_screen.dart';
 import 'features/goals/goals_screen.dart';
+import 'features/backup/backup_screen.dart';
+import 'features/backup/backup_service.dart';
 import 'features/planning/calendar_screen.dart';
 import 'features/planning/planning_repository.dart';
 import 'features/planning/projects_screen.dart';
@@ -193,22 +195,26 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                       onSelected: (value) => Navigator.push(
                         context,
                         MaterialPageRoute<void>(
-                          builder: (_) => value == 'habits'
-                              ? HabitsScreen(
-                                  repository: WellbeingRepository(
-                                    widget.database!,
-                                  ),
-                                )
-                              : JournalScreen(
-                                  repository: WellbeingRepository(
-                                    widget.database!,
-                                  ),
-                                ),
+                          builder: (_) => switch (value) {
+                            'habits' => HabitsScreen(
+                              repository: WellbeingRepository(widget.database!),
+                            ),
+                            'journal' => JournalScreen(
+                              repository: WellbeingRepository(widget.database!),
+                            ),
+                            _ => BackupScreen(
+                              service: BackupService(widget.database!),
+                            ),
+                          },
                         ),
                       ),
                       itemBuilder: (context) => const [
                         PopupMenuItem(value: 'habits', child: Text('Привычки')),
                         PopupMenuItem(value: 'journal', child: Text('Дневник')),
+                        PopupMenuItem(
+                          value: 'backup',
+                          child: Text('Резервная копия'),
+                        ),
                       ],
                     ),
                   ),

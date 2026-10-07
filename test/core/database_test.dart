@@ -111,6 +111,10 @@ void main() {
         (await upgraded.database.query('timer_sessions')).single['id'],
         'old-session',
       );
+      expect(
+        await upgraded.database.rawQuery('PRAGMA table_info(app_metadata)'),
+        isNotEmpty,
+      );
     },
   );
 }
