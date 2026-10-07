@@ -15,8 +15,8 @@
 
 | ID | Результат | Статус |
 | --- | --- | --- |
-| G1 | Среда, каркас, локальное хранилище | IN_PROGRESS |
-| G2 | Inbox и разбор | NOT_IMPLEMENTED |
+| G1 | Среда, каркас, локальное хранилище | COMPLETE |
+| G2 | Inbox и разбор | IN_PROGRESS |
 | G3 | План дня, календарь, проекты, цели | NOT_IMPLEMENTED |
 | G4 | Таймеры, дыхание, отсрочка | NOT_IMPLEMENTED |
 | G5 | Напоминания | NOT_IMPLEMENTED |
@@ -32,6 +32,13 @@
 Проверки: `flutter test test/core/database_test.dart`, `flutter analyze`, `flutter test`, `git status`, `git check-ignore`.
 RED: наблюдался 2026-10-07: два теста БД падали с `UnimplementedError: Database schema is not implemented`; тест экрана падал, потому что не находил «Планерка»; два теста моделей падали на потере ID и длительности.
 GREEN: `flutter test` — 5 тестов прошли. `flutter analyze` из ASCII-пути к репозиторию — `No issues found`. `flutter build apk --debug` — прошла; APK установлен и запущен на эмуляторе Android 25 x86_64. На Android 27 x86 (32 бит) установка ожидаемо не поддерживается (`INSTALL_FAILED_NO_MATCHING_ABIS`). Экран проверен снимком.
+Коммит G1: `cfe9f4d5e3e2b29f595046441cd9a2ca0d4d2727`. Git проверен на личные суммы, имена, локальные пути и seed; совпадений в отслеживаемых файлах нет. Следующая цель: G2, Inbox и разбор.
+
+## G2
+
+Критерии: пустой ввод отклоняется; ввод, редактирование и удаление сохраняются; четыре исхода разбора переводят запись в нужное состояние; проект создаётся отдельно от задачи; длинный текст не теряется; UI позволяет выполнить основной сценарий.
+Проверки: `flutter test test/features/inbox_test.dart`, `flutter test test/widgets/inbox_screen_test.dart`, общая регрессия, анализ и проверка на эмуляторе.
+RED: ещё не наблюдался.
 
 ## Решения
 
