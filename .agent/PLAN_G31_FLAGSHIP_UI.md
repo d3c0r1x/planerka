@@ -23,6 +23,9 @@ Refresh `lib/features/home/home_screen.dart`, `lib/features/planning/today_scree
 - Show honest completion progress with a clear numerator/total. Do not label selected dates or backlog as completed work.
 - Reduce crowded task-row actions to one primary action plus an accessible secondary menu.
 - Use a compact branded month grid with task, deadline, and shift markers plus a selected-day summary.
+- Keep the swipe regression test representative of a real Android drag with multiple pointer events after Home gains vertical scrolling.
+- Refresh calendar markers after shift overrides or future-cycle adjustments through a UI callback; keep shift calculations and persistence unchanged.
+- Show a retryable unavailable state when month marker loading fails; never announce unknown task counts as zero.
 - Preserve task completion, deadlines, shift setup, overnight shift details, and calendar interactions.
 - Update widget tests, including a narrow-screen overflow check.
 
