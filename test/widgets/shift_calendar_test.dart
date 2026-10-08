@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:planerka/core/app_database.dart';
+import 'package:planerka/core/models.dart';
 import 'package:planerka/features/planning/calendar_screen.dart';
 import 'package:planerka/features/planning/planning_repository.dart';
 import 'package:planerka/features/inbox/inbox_repository.dart';
@@ -280,6 +281,179 @@ void main() {
     expect(find.byKey(const Key('calendar-day-2026-11-1')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('month shift markers refresh after a day override', (
+    tester,
+  ) async {
+    await database.database.delete(
+      'shift_teams',
+      where: 'id != ?',
+      whereArgs: ['a'],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CalendarScreen(
+          repository: PlanningRepository(database),
+          shifts: shifts,
+          initialDate: anchor,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('calendar-shift-marker-2026-10-8')),
+      findsOneWidget,
+    );
+    await tester.drag(find.byType(ListView).first, const Offset(0, -500));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-shift-a')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('override-cancel-switch')));
+    await tester.tap(find.byKey(const Key('save-shift-override')));
+    await tester.pumpAndSettle();
+    expect(
+      (await shifts.calendar(
+        anchor,
+        anchor.add(const Duration(days: 1)),
+      )).single.cancelled,
+      isTrue,
+    );
+    await tester.drag(find.byType(ListView).first, const Offset(0, 800));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('calendar-shift-marker-2026-10-8')),
+      findsNothing,
+    );
+    expect(
+      tester
+          .getSemantics(find.byKey(const Key('calendar-day-2026-10-8')))
+          .label,
+      isNot(contains('есть смена')),
+    );
+  });
+
+  testWidgets('month shift markers refresh after future cycle adjustment', (
+    tester,
+  ) async {
+    await database.database.delete(
+      'shift_teams',
+      where: 'id != ?',
+      whereArgs: ['a'],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CalendarScreen(
+          repository: PlanningRepository(database),
+          shifts: shifts,
+          initialDate: anchor.add(const Duration(days: 2)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('calendar-shift-marker-2026-10-10')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('calendar-shift-marker-2026-10-12')),
+      findsOneWidget,
+    );
+    await tester.drag(find.byType(ListView).first, const Offset(0, -500));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Сдвиг будущего графика'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Сдвинуть цикл…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('shift-adjust-forward-a')));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView).first, const Offset(0, 800));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('calendar-shift-marker-2026-10-10')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('calendar-shift-marker-2026-10-12')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('calendar-shift-marker-2026-10-9')),
+      findsOneWidget,
+    );
+  });
+
+  for (final failShifts in [true, false]) {
+    testWidgets(
+      'month marker loading ${failShifts ? 'shift' : 'task'} errors offer retry without false zero semantics',
+      (tester) async {
+        final unreliableShifts = _RetryableShiftRepository(database)
+          ..failMonth = failShifts;
+        final unreliableTasks = _RetryablePlanningRepository(database)
+          ..failMonth = !failShifts;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: CalendarScreen(
+              repository: unreliableTasks,
+              shifts: unreliableShifts,
+              initialDate: anchor,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('События месяца недоступны'), findsOneWidget);
+        final label = tester
+            .getSemantics(find.byKey(const Key('calendar-day-2026-10-8')))
+            .label;
+        expect(label, contains('данные недоступны'));
+        expect(label, isNot(contains('0 задач')));
+        unreliableShifts.failMonth = false;
+        unreliableTasks.failMonth = false;
+        await tester.tap(find.byKey(const Key('calendar-month-retry')));
+        await tester.pumpAndSettle();
+        expect(find.text('События месяца недоступны'), findsNothing);
+        expect(
+          find.byKey(const Key('calendar-shift-marker-2026-10-8')),
+          findsOneWidget,
+        );
+        expect(
+          tester
+              .getSemantics(find.byKey(const Key('calendar-day-2026-10-8')))
+              .label,
+          contains('есть смена'),
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+}
+
+class _RetryableShiftRepository extends ShiftRepository {
+  _RetryableShiftRepository(super.database);
+  bool failMonth = true;
+
+  @override
+  Future<List<ShiftDayStatus>> calendar(
+    DateTime start,
+    DateTime endExclusive,
+  ) async {
+    if (failMonth && endExclusive.difference(start).inDays > 1) {
+      throw StateError('Synthetic month shift read failure');
+    }
+    return super.calendar(start, endExclusive);
+  }
+}
+
+class _RetryablePlanningRepository extends PlanningRepository {
+  _RetryablePlanningRepository(super.database);
+  bool failMonth = false;
+
+  @override
+  Future<List<TaskEntry>> listForDay(DateTime date) async {
+    if (failMonth && date.day == 9) {
+      throw StateError('Synthetic month task read failure');
+    }
+    return super.listForDay(date);
+  }
 }
 
 ShiftTeam _team(String id, int offset, {bool attends = true}) => ShiftTeam(

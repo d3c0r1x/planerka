@@ -48,8 +48,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         widget.repository.listForDay(DateTime(month.year, month.month, day)),
     ]);
     final shiftFuture = widget.shifts.calendar(month, end);
-    final tasks = await taskFuture;
-    final shifts = await shiftFuture;
+    final (tasks, shifts) = await (taskFuture, shiftFuture).wait;
     return _MonthData(
       tasks: {for (var day = 1; day <= days; day++) day: tasks[day - 1]},
       shiftDays: {
@@ -63,6 +62,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
     _month = DateTime(_month.year, _month.month + delta);
     _monthData = _loadMonth();
   });
+
+  void _reloadMonth() {
+    setState(() {
+      _monthData = _loadMonth();
+    });
+  }
 
   Future<void> _pickDate() async {
     final date = await showDatePicker(
@@ -87,7 +92,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         builder: (_) => ShiftSetupScreen(repository: widget.shifts),
       ),
     );
-    if (saved == true && mounted) setState(() => _monthData = _loadMonth());
+    if (saved == true && mounted) _reloadMonth();
   }
 
   @override
@@ -116,6 +121,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             repository: widget.shifts,
             selectedDate: _selected,
             onSetup: _openShiftSetup,
+            onChanged: _reloadMonth,
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 18, 4, 4),
@@ -401,6 +407,29 @@ class _CalendarScreenState extends State<CalendarScreen> {
               future: _monthData,
               builder: (context, snapshot) => Column(
                 children: [
+                  if (snapshot.hasError)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      child: Column(
+                        children: [
+                          const Text(
+                            'События месяца недоступны',
+                            style: TextStyle(color: AppTheme.coral),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Не удалось загрузить задачи и смены.',
+                            textAlign: TextAlign.center,
+                          ),
+                          TextButton.icon(
+                            key: const Key('calendar-month-retry'),
+                            onPressed: _reloadMonth,
+                            icon: const Icon(Icons.refresh_rounded),
+                            label: const Text('Повторить загрузку'),
+                          ),
+                        ],
+                      ),
+                    ),
                   for (var week = 0; week < weeks; week++)
                     Row(
                       children: [
@@ -442,9 +471,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                     data?.shiftDays.contains(day) ?? false;
                                 final suffix =
                                     '${date.year}-${date.month}-${date.day}';
+                                final eventsLabel = snapshot.hasError
+                                    ? 'данные недоступны'
+                                    : data == null
+                                    ? 'события загружаются'
+                                    : '${tasks.length} задач${deadline ? ', есть дедлайн' : ''}${shift ? ', есть смена' : ''}';
                                 return Semantics(
                                   label:
-                                      '${MaterialLocalizations.of(context).formatFullDate(date)}, ${tasks.length} задач${deadline ? ', есть дедлайн' : ''}${shift ? ', есть смена' : ''}',
+                                      '${MaterialLocalizations.of(context).formatFullDate(date)}, $eventsLabel',
                                   selected: selected,
                                   button: true,
                                   child: Padding(

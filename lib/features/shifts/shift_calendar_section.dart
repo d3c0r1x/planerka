@@ -9,11 +9,13 @@ class ShiftCalendarSection extends StatefulWidget {
     required this.repository,
     required this.selectedDate,
     this.onSetup,
+    this.onChanged,
   });
 
   final ShiftRepository repository;
   final DateTime selectedDate;
   final VoidCallback? onSetup;
+  final VoidCallback? onChanged;
 
   @override
   State<ShiftCalendarSection> createState() => _ShiftCalendarSectionState();
@@ -176,7 +178,10 @@ class _ShiftCalendarSectionState extends State<ShiftCalendarSection> {
     );
     if (value == null) return;
     await widget.repository.setDayOverride(value);
-    if (mounted) setState(_reload);
+    if (mounted) {
+      setState(_reload);
+      widget.onChanged?.call();
+    }
   }
 
   Future<void> _adjustFuture(ShiftDayStatus status) async {
@@ -209,7 +214,10 @@ class _ShiftCalendarSectionState extends State<ShiftCalendarSection> {
         deltaDays: delta,
       ),
     );
-    if (mounted) setState(_reload);
+    if (mounted) {
+      setState(_reload);
+      widget.onChanged?.call();
+    }
   }
 
   @override
