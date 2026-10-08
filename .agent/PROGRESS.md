@@ -396,3 +396,14 @@ G12 verification: 55 tests, analyzer, APK build/install passed.
 - UI audit of every screen/large-font screenshot and pinned widget placement not completed; emulator automation verified startup/provider and deep link, not pixel layout.
 - G28 minimum covered for app label/theme/UI suite; detailed visual screenshots remain a limitation.
 - Next: G29 final delivery audit.
+
+### G29 — final Android delivery audit
+
+- Status: PARTIAL; APK and source checks pass; cannot call delivery complete because current signing key is Debug and physical Redmi Note 13 / launcher visual / every integration screen not verified.
+- Full lutter test --concurrency=1 --reporter compact: 178 PASS. lutter analyze: clean. Focused widget+review+planning: 18 PASS; final widget/navigation focused: 13 PASS. git diff --check: clean.
+- API35 x86_64 debug installed, receiver registered; cold-start task completion and duplicate prevention verified. Release arm64 APK installed and started. Font scales 1.0 and 1.3 app launch verified.
+- Release APK: C:\Users\d3c0r\Desktop\Планерка\Ритм-дня-arm64.apk; 41,195,766 bytes; package com.planerka.mobile; min SDK 28, target SDK 36; ARM64 llama native library; no GGUF or seed entries found. SHA-256 A8AE7E8084EC71B46FDE0A0F8FD8A0DA95B8BC562A1405C5F032E67FEB9E5B65.
+- Signature verified with APK v2 but certificate is Android Debug (f57d3dc1de2817b369f4553628215ef65359c4f016a6c85ef1ae5870be4425a). APK is suitable for manual install/testing only, not Play Store. No user release key was available; do not use debug cert for public release.
+- Manifest label now Ритм дня; G28 commit d74b88f pushed before final APK. G27 commits 79c024, 155fbde, 8e07632 pushed. Existing private directory remains ignored; worktree clean.
+- Redmi Note 13 physical device unavailable: NOT_RUN. Airplane mode and visual widget placement not exercised. Cloud is disabled unless configured and agreed, existing tests cover no-consent route.
+- Do not create GitHub Release until proper release signing key and full smoke scenario are available. Source commits pushed to develop.
