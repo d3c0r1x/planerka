@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../../../core/app_database.dart';
 import '../../../core/models.dart';
 import '../../planning/planning_repository.dart';
+import '../../shifts/shift_repository.dart';
 import '../model/local_ai_engine.dart';
 import 'ai_context_builder.dart';
 import 'ai_suggestion.dart';
@@ -124,7 +125,16 @@ class AiRecommendationService {
   Future<AiPlanningContext> buildContext() async {
     final taskRows = await database.database.query(
       'tasks',
-      columns: ['id', 'title', 'notes', 'status', 'due_at', 'scheduled_date'],
+      columns: [
+        'id',
+        'title',
+        'notes',
+        'status',
+        'due_at',
+        'scheduled_date',
+        'scheduled_at',
+        'estimated_minutes',
+      ],
       where: "status IN ('planned', 'quick')",
       orderBy: 'CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at, created_at',
       limit: 50,
@@ -161,6 +171,13 @@ class AiRecommendationService {
             status: row['status'] as String,
             dueDay: day(row['due_at'] as String?),
             scheduledDay: day(row['scheduled_date'] as String?),
+            dueAt: row['due_at'] == null
+                ? null
+                : DateTime.parse(row['due_at'] as String).toLocal(),
+            scheduledAt: row['scheduled_at'] == null
+                ? null
+                : DateTime.parse(row['scheduled_at'] as String).toLocal(),
+            estimatedMinutes: row['estimated_minutes'] as int?,
           ),
         )
         .toList();
@@ -182,11 +199,43 @@ class AiRecommendationService {
         note: row['text'] as String,
       );
     }).toList();
+    final shiftRepository = ShiftRepository(database);
+    final shiftDays = await shiftRepository.calendar(
+      _now(),
+      DateTime(_now().year, _now().month, _now().day + 8),
+    );
+    final teams = await shiftRepository.listTeams();
+    final attending = teams
+        .where((team) => team.attends)
+        .map((team) => team.id)
+        .toSet();
+    final busyBlocks = <AiBusyBlock>[
+      for (final shift in shiftDays)
+        if (attending.contains(shift.teamId) &&
+            shift.blockStart != null &&
+            shift.blockEnd != null)
+          AiBusyBlock(
+            start: shift.blockStart!,
+            end: shift.blockEnd!,
+            label: 'Смена',
+          ),
+      for (final task in tasks)
+        if (task.scheduledAt != null)
+          AiBusyBlock(
+            start: task.scheduledAt!,
+            end: task.scheduledAt!.add(
+              Duration(minutes: task.estimatedMinutes ?? 30),
+            ),
+            label: task.title,
+            taskId: task.id,
+          ),
+    ];
     return _contextBuilder.build(
       tasks: tasks,
       goals: goals,
       diary: diary,
       includeDiary: includeDiary,
+      busyBlocks: busyBlocks,
     );
   }
 
@@ -344,6 +393,38 @@ class AiRecommendationService {
   ) async {
     final selected = suggestion.select(selectedTaskIds);
     if (selected.isEmpty) return;
+    final freshContext = await buildContext();
+    final selectedIds = selected.map((item) => item.taskId).toSet();
+    for (var i = 0; i < selected.length; i++) {
+      final item = selected[i];
+      final start = item.scheduledAt!;
+      final end = start.add(Duration(minutes: item.durationMinutes));
+      final task = freshContext.tasks.where((task) => task.id == item.taskId);
+      if (task.isEmpty || start.isBefore(_now())) {
+        throw StateError('Временной слот устарел; составь план заново');
+      }
+      final dueAt = task.single.dueAt;
+      if (dueAt != null && end.isAfter(dueAt)) {
+        throw StateError('Слот выходит за актуальный дедлайн');
+      }
+      if (freshContext.busyBlocks.any(
+        (block) =>
+            !selectedIds.contains(block.taskId) &&
+            start.isBefore(block.end) &&
+            end.isAfter(block.start),
+      )) {
+        throw StateError('Слот пересекается с занятым временем');
+      }
+      for (final other in selected.skip(i + 1)) {
+        final otherStart = other.scheduledAt!;
+        final otherEnd = otherStart.add(
+          Duration(minutes: other.durationMinutes),
+        );
+        if (start.isBefore(otherEnd) && end.isAfter(otherStart)) {
+          throw StateError('Выбранные слоты пересекаются');
+        }
+      }
+    }
     final today = DateTime(_now().year, _now().month, _now().day);
     await database.database.transaction((txn) async {
       for (final item in selected) {
@@ -354,6 +435,8 @@ class AiRecommendationService {
           'tasks',
           {
             'scheduled_date': _formatDay(item.day),
+            'scheduled_at': item.scheduledAt!.toUtc().toIso8601String(),
+            'estimated_minutes': item.durationMinutes,
             'updated_at': _now().toUtc().toIso8601String(),
           },
           where: "id = ? AND status IN ('planned', 'quick')",

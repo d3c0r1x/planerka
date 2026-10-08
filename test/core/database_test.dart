@@ -124,7 +124,7 @@ void main() {
     },
   );
 
-  test('v6 to v7 migration preserves planner, diary and XP rows', () async {
+  test('v6 to v8 migration preserves planner, diary and XP rows', () async {
     final directory = await Directory.systemTemp.createTemp(
       'planerka_v6_shift_upgrade_',
     );
@@ -176,7 +176,36 @@ void main() {
     expect(
       (await upgraded.database.rawQuery('PRAGMA user_version'))
           .single['user_version'],
-      7,
+      8,
     );
+  });
+
+  test('v7 to v8 adds schedule fields and preserves deadline', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'planerka_v7_upgrade_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final path = p.join(directory.path, 'legacy-v7.db');
+    final legacy = await databaseFactoryFfi.openDatabase(
+      path,
+      options: OpenDatabaseOptions(
+        version: 7,
+        onCreate: (db, _) => db.execute(
+          'CREATE TABLE tasks (id TEXT PRIMARY KEY, title TEXT NOT NULL, due_at TEXT)',
+        ),
+      ),
+    );
+    await legacy.insert('tasks', {
+      'id': 'kept',
+      'title': 'Deadline task',
+      'due_at': '2026-10-12T16:00:00.000Z',
+    });
+    await legacy.close();
+    final upgraded = await AppDatabase.open(path, factory: databaseFactoryFfi);
+    addTearDown(upgraded.close);
+    final task = (await upgraded.database.query('tasks')).single;
+    expect(task['due_at'], '2026-10-12T16:00:00.000Z');
+    expect(task['scheduled_at'], isNull);
+    expect(task['estimated_minutes'], isNull);
   });
 }

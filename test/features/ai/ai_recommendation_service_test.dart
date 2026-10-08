@@ -8,6 +8,8 @@ import 'package:planerka/features/ai/model/local_ai_engine.dart';
 import 'package:planerka/features/ai/planning/ai_recommendation_service.dart';
 import 'package:planerka/features/inbox/inbox_repository.dart';
 import 'package:planerka/features/planning/planning_repository.dart';
+import 'package:planerka/features/shifts/shift_models.dart';
+import 'package:planerka/features/shifts/shift_repository.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
@@ -186,8 +188,47 @@ void main() {
     );
   });
 
+  test(
+    'AI context includes commute blocks and already scheduled tasks',
+    () async {
+      await ShiftRepository(database)
+          .saveSchedule(ShiftSettings(anchorDate: DateTime(2026, 10, 8)), [
+            for (var i = 0; i < 4; i++)
+              ShiftTeam(
+                id: 'team-$i',
+                name: 'Смена ${i + 1}',
+                leaderName: 'Руководитель ${i + 1}',
+                colorValue: 0xFF336699,
+                phaseOffsetDays: i * 2,
+                attends: i == 0,
+              ),
+          ]);
+      await database.database.update(
+        'tasks',
+        {'scheduled_at': '2026-10-09T10:00:00.000Z', 'estimated_minutes': 45},
+        where: 'id = ?',
+        whereArgs: ['t2'],
+      );
+      final context = await service.buildContext();
+      expect(context.busyBlocks.any((block) => block.label == 'Смена'), isTrue);
+      final scheduled = context.busyBlocks.singleWhere(
+        (block) => block.taskId == 't2',
+      );
+      expect(
+        scheduled.end.difference(scheduled.start),
+        const Duration(minutes: 45),
+      );
+    },
+  );
+
   test('applies only explicitly selected proposals', () async {
     final suggestion = await service.generatePlan();
+    await database.database.update(
+      'tasks',
+      {'due_at': '2026-10-10T17:00:00.000Z'},
+      where: 'id = ?',
+      whereArgs: ['t2'],
+    );
     await service.applySelected(suggestion, {'t2'});
     final rows = await taskRows();
     expect(
@@ -198,6 +239,17 @@ void main() {
       rows.singleWhere((row) => row['id'] == 't2')['scheduled_date'],
       '2026-10-09',
     );
+    final t2 = await database.database.query(
+      'tasks',
+      where: 'id = ?',
+      whereArgs: ['t2'],
+    );
+    expect(
+      t2.single['scheduled_at'],
+      DateTime(2026, 10, 9, 9).toUtc().toIso8601String(),
+    );
+    expect(t2.single['estimated_minutes'], 30);
+    expect(t2.single['due_at'], '2026-10-10T17:00:00.000Z');
   });
 
   test('cancelled preview leaves database unchanged', () async {

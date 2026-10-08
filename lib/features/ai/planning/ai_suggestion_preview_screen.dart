@@ -113,7 +113,9 @@ class _AiSuggestionPreviewScreenState extends State<AiSuggestionPreviewScreen> {
                         }
                       }),
                       title: Text(item.taskTitle),
-                      subtitle: Text('${item.dayLabel} · ${item.reason}'),
+                      subtitle: Text(
+                        '${item.dayLabel} · ${TimeOfDay.fromDateTime(item.scheduledAt!).format(context)} · ${item.durationMinutes} мин\n${item.reason}',
+                      ),
                       controlAffinity: ListTileControlAffinity.leading,
                     ),
                   );

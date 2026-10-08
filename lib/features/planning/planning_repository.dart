@@ -34,6 +34,60 @@ class PlanningRepository {
     await database.remindersChanged();
   }
 
+  Future<void> setScheduleBlock(
+    String taskId,
+    DateTime scheduledAt,
+    int estimatedMinutes,
+  ) async {
+    if (estimatedMinutes < 1 || estimatedMinutes > 1440) {
+      throw ArgumentError.value(estimatedMinutes, 'estimatedMinutes');
+    }
+    if (scheduledAt.isBefore(_now())) {
+      throw ArgumentError.value(scheduledAt, 'scheduledAt', 'Время уже прошло');
+    }
+    final taskRows = await database.database.query(
+      'tasks',
+      columns: ['due_at'],
+      where: "id = ? AND status IN ('planned', 'quick')",
+      whereArgs: [taskId],
+      limit: 1,
+    );
+    if (taskRows.isEmpty) throw StateError('Задача больше недоступна');
+    final deadline = taskRows.single['due_at'] as String?;
+    if (deadline != null &&
+        scheduledAt
+            .add(Duration(minutes: estimatedMinutes))
+            .toUtc()
+            .isAfter(DateTime.parse(deadline))) {
+      throw ArgumentError('Блок выходит за дедлайн');
+    }
+    final changed = await database.database.update(
+      'tasks',
+      {
+        'scheduled_at': scheduledAt.toUtc().toIso8601String(),
+        'estimated_minutes': estimatedMinutes,
+        'scheduled_date': _day(scheduledAt),
+        'updated_at': _now().toUtc().toIso8601String(),
+      },
+      where: "id = ? AND status IN ('planned', 'quick')",
+      whereArgs: [taskId],
+    );
+    if (changed != 1) throw StateError('Задача больше недоступна');
+  }
+
+  Future<void> clearScheduleBlock(String taskId) async {
+    await database.database.update(
+      'tasks',
+      {
+        'scheduled_at': null,
+        'estimated_minutes': null,
+        'updated_at': _now().toUtc().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [taskId],
+    );
+  }
+
   Future<void> setReminder(String taskId, DateTime remindAt) async {
     final changed = await database.database.update(
       'tasks',
@@ -135,10 +189,16 @@ class PlanningRepository {
       '''
       SELECT * FROM tasks
       WHERE status IN ('planned', 'quick')
-        AND (scheduled_date = ? OR (due_at >= ? AND due_at < ?))
-      ORDER BY due_at, created_at
+        AND (scheduled_date = ? OR (due_at >= ? AND due_at < ?) OR (scheduled_at >= ? AND scheduled_at < ?))
+      ORDER BY COALESCE(scheduled_at, due_at), created_at
     ''',
-      [_day(date), start.toIso8601String(), end.toIso8601String()],
+      [
+        _day(date),
+        start.toIso8601String(),
+        end.toIso8601String(),
+        start.toIso8601String(),
+        end.toIso8601String(),
+      ],
     );
     return rows.map(TaskEntry.fromMap).toList();
   }

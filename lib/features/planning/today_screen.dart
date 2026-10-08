@@ -65,6 +65,72 @@ class _TodayScreenState extends State<TodayScreen> {
     await _pickDateTime(task, reminder: true);
   }
 
+  Future<void> _scheduleBlock(TaskEntry task) async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: task.scheduledAt ?? now,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: DateTime(now.year + 5),
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: task.scheduledAt == null
+          ? const TimeOfDay(hour: 9, minute: 0)
+          : TimeOfDay.fromDateTime(task.scheduledAt!.toLocal()),
+    );
+    if (time == null || !mounted) return;
+    var minutes = task.estimatedMinutes ?? 30;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Длительность задачи'),
+        content: DropdownButtonFormField<int>(
+          initialValue: minutes,
+          items: [15, 30, 45, 60, 90, 120, 180]
+              .map(
+                (value) =>
+                    DropdownMenuItem(value: value, child: Text('$value минут')),
+              )
+              .toList(),
+          onChanged: (value) {
+            if (value != null) minutes = value;
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    );
+    if (accepted != true || !mounted) return;
+    try {
+      await widget.repository.setScheduleBlock(
+        task.id,
+        DateTime(date.year, date.month, date.day, time.hour, time.minute),
+        minutes,
+      );
+      if (mounted) _refresh();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось запланировать задачу: $error')),
+      );
+    }
+  }
+
+  Future<void> _clearScheduleBlock(TaskEntry task) async {
+    await widget.repository.clearScheduleBlock(task.id);
+    if (mounted) _refresh();
+  }
+
   Future<void> _pickDateTime(TaskEntry task, {required bool reminder}) async {
     final now = DateTime.now();
     final date = await showDatePicker(
@@ -97,10 +163,15 @@ class _TodayScreenState extends State<TodayScreen> {
   Widget _taskTile(TaskEntry task, {bool backlog = false}) => Card(
     child: ListTile(
       title: Text(task.title),
-      subtitle: task.dueAt == null
+      subtitle: task.dueAt == null && task.scheduledAt == null
           ? null
           : Text(
-              'Срок: ${MaterialLocalizations.of(context).formatMediumDate(task.dueAt!.toLocal())}',
+              [
+                if (task.scheduledAt != null)
+                  'План: ${MaterialLocalizations.of(context).formatMediumDate(task.scheduledAt!.toLocal())}, ${TimeOfDay.fromDateTime(task.scheduledAt!.toLocal()).format(context)} · ${task.estimatedMinutes ?? 30} мин',
+                if (task.dueAt != null)
+                  'Дедлайн: ${MaterialLocalizations.of(context).formatMediumDate(task.dueAt!.toLocal())}',
+              ].join('\n'),
             ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -116,6 +187,19 @@ class _TodayScreenState extends State<TodayScreen> {
             onPressed: widget.interactive ? () => _setReminder(task) : null,
             icon: const Icon(Icons.notifications_active_rounded),
           ),
+          IconButton(
+            tooltip: 'Запланировать время',
+            onPressed: widget.interactive ? () => _scheduleBlock(task) : null,
+            icon: const Icon(Icons.schedule_rounded),
+          ),
+          if (task.scheduledAt != null)
+            IconButton(
+              tooltip: 'Убрать время',
+              onPressed: widget.interactive
+                  ? () => _clearScheduleBlock(task)
+                  : null,
+              icon: const Icon(Icons.event_busy_rounded),
+            ),
           IconButton(
             tooltip: 'Назначить срок',
             onPressed: widget.interactive ? () => _schedule(task) : null,

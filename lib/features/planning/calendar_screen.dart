@@ -94,7 +94,19 @@ class _CalendarScreenState extends State<CalendarScreen> {
               }
               return Column(
                 children: tasks
-                    .map((task) => ListTile(title: Text(task.title)))
+                    .map(
+                      (task) => ListTile(
+                        title: Text(task.title),
+                        subtitle: Text(
+                          [
+                            if (task.scheduledAt != null)
+                              'План: ${MaterialLocalizations.of(context).formatMediumDate(task.scheduledAt!.toLocal())}, ${TimeOfDay.fromDateTime(task.scheduledAt!.toLocal()).format(context)} · ${task.estimatedMinutes ?? 30} мин',
+                            if (task.dueAt != null)
+                              'Дедлайн: ${MaterialLocalizations.of(context).formatMediumDate(task.dueAt!.toLocal())}',
+                          ].join('\n'),
+                        ),
+                      ),
+                    )
                     .toList(),
               );
             },

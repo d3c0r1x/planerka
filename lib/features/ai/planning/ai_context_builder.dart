@@ -7,6 +7,9 @@ class AiTaskContext {
     this.status = 'planned',
     this.dueDay,
     this.scheduledDay,
+    this.dueAt,
+    this.scheduledAt,
+    this.estimatedMinutes,
     this.notes = '',
   });
 
@@ -15,6 +18,9 @@ class AiTaskContext {
   final String status;
   final String? dueDay;
   final String? scheduledDay;
+  final DateTime? dueAt;
+  final DateTime? scheduledAt;
+  final int? estimatedMinutes;
   final String notes;
 }
 
@@ -65,11 +71,13 @@ class AiPlanningContext {
     required this.tasks,
     required this.goals,
     required this.diary,
+    this.busyBlocks = const [],
   });
 
   final List<AiTaskContext> tasks;
   final List<AiGoalContext> goals;
   final List<AiMoodContext> diary;
+  final List<AiBusyBlock> busyBlocks;
 
   Map<String, Object?> toJson() => {
     'tasks': tasks
@@ -80,7 +88,20 @@ class AiPlanningContext {
             'status': task.status,
             'dueDay': task.dueDay,
             'scheduledDay': task.scheduledDay,
+            'scheduledAt': task.scheduledAt?.toIso8601String(),
+            'estimatedMinutes': task.estimatedMinutes,
+            'dueAt': task.dueAt?.toIso8601String(),
             if (task.notes.isNotEmpty) 'notes': task.notes,
+          },
+        )
+        .toList(),
+    'busyBlocks': busyBlocks
+        .map(
+          (block) => {
+            'start': block.start.toIso8601String(),
+            'end': block.end.toIso8601String(),
+            'label': block.label,
+            'taskId': block.taskId,
           },
         )
         .toList(),
@@ -107,12 +128,26 @@ class AiPlanningContext {
   };
 }
 
+class AiBusyBlock {
+  const AiBusyBlock({
+    required this.start,
+    required this.end,
+    required this.label,
+    this.taskId,
+  });
+  final DateTime start;
+  final DateTime end;
+  final String label;
+  final String? taskId;
+}
+
 class AiContextBuilder {
   AiPlanningContext build({
     required List<AiTaskContext> tasks,
     required List<AiGoalContext> goals,
     required List<AiMoodContext> diary,
     required bool includeDiary,
+    List<AiBusyBlock> busyBlocks = const [],
   }) {
     final safeTasks = tasks.take(50).map((task) {
       return AiTaskContext(
@@ -121,6 +156,9 @@ class AiContextBuilder {
         status: task.status,
         dueDay: task.dueDay,
         scheduledDay: task.scheduledDay,
+        dueAt: task.dueAt,
+        scheduledAt: task.scheduledAt,
+        estimatedMinutes: task.estimatedMinutes,
         notes: _limit(task.notes, 240),
       );
     }).toList();
@@ -148,16 +186,17 @@ class AiContextBuilder {
       tasks: safeTasks,
       goals: safeGoals,
       diary: safeDiary,
+      busyBlocks: busyBlocks.take(100).toList(),
     );
   }
 
   String prompt(AiPlanningContext context, {required DateTime today}) {
-    return '''Ты локальный помощник планировщика. Предложи до 5 переносов существующих задач на сегодня или будущие даты.
-Не выдумывай id и не добавляй новые дела. Учитывай дедлайны, цели и переданный дневник настроения без осуждения.
-Верни только JSON: {"summary":"краткий вывод","recommendations":[{"taskId":"id из контекста","day":"YYYY-MM-DD","reason":"краткое пояснение"}]}.
+    return '''Ты помощник планировщика. Предложи до 5 точных временных слотов для существующих задач на сегодня или ближайшие 7 дней.
+Не выдумывай id и не добавляй новые дела. Не ставь задачи внутрь busyBlocks. Учитывай dueAt, цели и дневник настроения без осуждения.
+Верни только JSON: {"summary":"краткий вывод","recommendations":[{"taskId":"id из контекста","scheduledAt":"ISO8601 local date-time","durationMinutes":30,"reason":"краткое пояснение"}]}.
 Если переносы не нужны, верни пустой recommendations.
 Сегодня: ${_day(today)}
-Контекст: ${_encode(context.toJson())}''';
+Длительность бери из estimatedMinutes либо оцени в пределах 15-180 минут. Контекст: ${_encode(context.toJson())}''';
   }
 
   String inboxPrompt(List<AiInboxTaskContext> tasks) =>

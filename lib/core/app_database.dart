@@ -17,7 +17,7 @@ class AppDatabase {
     final database = await source.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 7,
+        version: 8,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: (db, version) async {
           await db.execute('''
@@ -39,6 +39,8 @@ class AppDatabase {
               project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
               parent_task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
               due_at TEXT,
+              scheduled_at TEXT,
+              estimated_minutes INTEGER,
               remind_at TEXT,
               scheduled_date TEXT,
               completed_at TEXT,
@@ -164,6 +166,22 @@ class AppDatabase {
             }
           }
           if (oldVersion < 7) await _createShiftTables(db);
+          if (oldVersion < 8) {
+            final taskTable = await db.rawQuery(
+              "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'tasks'",
+            );
+            if (taskTable.isNotEmpty) {
+              await db.execute(
+                'ALTER TABLE tasks ADD COLUMN scheduled_at TEXT',
+              );
+              await db.execute(
+                'ALTER TABLE tasks ADD COLUMN estimated_minutes INTEGER',
+              );
+              await db.execute(
+                'CREATE INDEX tasks_scheduled_at_idx ON tasks(scheduled_at)',
+              );
+            }
+          }
         },
       ),
     );
