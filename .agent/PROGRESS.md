@@ -385,3 +385,14 @@ G12 verification: 55 tests, analyzer, APK build/install passed.
 - RED: lagship_navigation_test timed out in pumpAndSettle before guard. GREEN: flagship navigation — 5 PASS; goals screen — 2 PASS; full lutter test --concurrency=1 --reporter compact — 178 PASS; lutter analyze clean.
 - Debug APK rebuilt and reinstalled API35. Receiver query found com.planerka.mobile/.PlannerWidgetProvider; app relaunched successfully.
 - Follow-up commit recorded separately after G27 main commit.
+
+### G28 — visual polish and branding
+
+- Status: GREEN; commit after release smoke and final repository audit.
+- Updated application and widget labels to Ритм дня; aapt confirms application-label Ритм дня. Existing launcher assets are colorful adaptive PNG icons and remain unchanged.
+- Dark theme uses black main surface, colored accent palette and progress cards. Home, Inbox, focus, goals and navigation flows passed focused UI suites (15 PASS); goal screen 2 PASS.
+- API35 x86_64: app launch checked with system font scales 1.0 and 1.3; no crash observed. Release APK installs successfully on API35 emulator.
+- Full lutter test --concurrency=1 --reporter compact: 178 PASS; lutter analyze: clean.
+- UI audit of every screen/large-font screenshot and pinned widget placement not completed; emulator automation verified startup/provider and deep link, not pixel layout.
+- G28 minimum covered for app label/theme/UI suite; detailed visual screenshots remain a limitation.
+- Next: G29 final delivery audit.
