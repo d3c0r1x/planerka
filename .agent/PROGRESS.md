@@ -187,3 +187,15 @@ G12 verification: 55 tests, analyzer, APK build/install passed.
 - Custom Android launcher/adaptive icons generated from existing brand art. APK copied to `C:\Users\d3c0r\Desktop\Планерка\Планерка-v2-arm64.apk`, 38,001,765 bytes, SHA-256 `7BE339037F85D27B710C77173CAFD0D2E9DC1868A6836497F5DEEB71CB77FACF`.
 - `private/` personal seed is ignored by Git and absent from tracked paths. Public code contains no personalised task data or exact target-phone model. The 484MB model is not in the APK. llama.cpp submodule source/pin is public-safe.
 - Release uses Gradle's existing debug signing config. Suitable for manual install, not Play Store publishing/updates under a persistent signing key. Physical target-device smoke test remains outstanding due no compatible connected hardware/emulator.
+
+## Redesign revision — 2026-10-08
+
+- User explicitly requested richer flagship design, Home Inbox capture, swipe tabs, primary goal progress driven by tasks, deadline/reminder UX, smarter AI planning, app-wide model status and background model download, expressive interactions/icons, and end-to-end emulator checks.
+- Approved execution plan: `.agent/PLAN_REDESIGN_2026-10-08.md`. Scope is directly authorized by the user's request; earlier AI approval rule persists: recommendations and task changes require user confirmation.
+- Starting repository state: `develop` clean at `8068d16`; prior full suite 81 PASS, analyzer clean, release APK built; prior emulator API25 x86_64 cannot run minSdk28 arm64 build.
+- New goals: R1 home shell/visual system; R2 primary goal and task progress with AI decomposition; R3 deadline-aware planner and Inbox AI; R4 background model download/global status; R5 compatible-emulator E2E, APK, privacy and publication.
+- Status: PLAN_RECORDED; re-run baseline and provision API35 x86_64 emulator before R1.
+
+- Baseline rerun 2026-10-08: `flutter analyze` clean; `flutter test --reporter compact` 81 PASS.
+- Emulator provisioning: Android API35 Google APIs x86_64 system image requested through sdkmanager; free C: before install 24.75 GB. Flutter-configured JDK 17 path: Unity Android OpenJDK.
+- R1 starts after API35 image install proceeds; APK validation will build x86_64 for emulator and arm64 for phone delivery.
