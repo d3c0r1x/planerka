@@ -377,3 +377,11 @@ G12 verification: 55 tests, analyzer, APK build/install passed.
 - API35 emulator-5556: debug APK built, installed and launched; receiver registered. Synthetic cold-start task link completed task. Repeated tap kept same completed_at and XP event count 1. Launcher card visual not verified because no widget instance was pinned.
 - Build report in ndroid/build/ excluded from Git after build produced untracked Gradle diagnostic.
 - Next: G28 visual polish.
+
+### G27 follow-up — cold start and end-to-end regression
+
+- HomeWidget.initiallyLaunchedFromHomeWidget() called without a platform channel in Flutter tests and kept startup async work pending. Startup now probes the widget channel and returns safely when unavailable.
+- Widget updates are decoupled from reminder callback; widget refresh runs on app resume, task capture and completion.
+- RED: lagship_navigation_test timed out in pumpAndSettle before guard. GREEN: flagship navigation — 5 PASS; goals screen — 2 PASS; full lutter test --concurrency=1 --reporter compact — 178 PASS; lutter analyze clean.
+- Debug APK rebuilt and reinstalled API35. Receiver query found com.planerka.mobile/.PlannerWidgetProvider; app relaunched successfully.
+- Follow-up commit recorded separately after G27 main commit.
