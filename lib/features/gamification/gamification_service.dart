@@ -15,6 +15,11 @@ abstract interface class GamificationDataSource {
   Future<CustomReward> addReward(String title);
   Future<List<CustomReward>> rewards();
   Future<void> redeemReward(String id, {DateTime? at});
+  Future<WeeklyReliability> reliabilityForWeek(DateTime date);
+  Future<void> setAccountabilityEnabled(bool enabled);
+  Future<List<AccountabilityEvent>> accountabilityHistory({int limit = 20});
+  Future<List<RecoveryTask>> completedTasks();
+  Future<void> resolvePenalty(String eventId, String recoveryTaskId);
 }
 
 class GamificationService implements GamificationDataSource {
@@ -321,6 +326,240 @@ class GamificationService implements GamificationDataSource {
       if (existing.isEmpty) throw StateError('Награда не найдена');
     }
   }
+
+  Future<PenaltyProposal> proposePenalty(
+    String taskId,
+    MissedTaskCause cause,
+  ) async {
+    if (cause != MissedTaskCause.avoidableDelay) {
+      throw StateError('Эта причина не создаёт штраф');
+    }
+    final enabled = await _accountabilityEnabled();
+    if (!enabled) throw StateError('Система ответственности выключена');
+    final tasks = await database.database.query(
+      'tasks',
+      columns: ['id', 'status', 'due_at', 'scheduled_at', 'estimated_minutes'],
+      where: "id = ? AND status IN ('planned', 'quick')",
+      whereArgs: [taskId],
+      limit: 1,
+    );
+    if (tasks.isEmpty) throw StateError('Задача недоступна');
+    final row = tasks.single;
+    final now = _now();
+    final due = row['due_at'] as String?;
+    final scheduled = row['scheduled_at'] as String?;
+    final duration = row['estimated_minutes'] as int? ?? 30;
+    final missed =
+        due != null && !DateTime.parse(due).isAfter(now.toUtc()) ||
+        scheduled != null &&
+            !DateTime.parse(scheduled)
+                .add(Duration(minutes: duration))
+                .isAfter(now);
+    if (!missed) throw StateError('Задача не просрочена');
+    final week = _weekStart(now);
+    return PenaltyProposal(
+      id: _newId(),
+      taskId: taskId,
+      cause: cause,
+      weekStart: week,
+      points: 10,
+    );
+  }
+
+  Future<void> confirmPenalty(PenaltyProposal proposal) async {
+    if (proposal.cause != MissedTaskCause.avoidableDelay ||
+        proposal.points != 10) {
+      throw StateError('Недопустимый штраф');
+    }
+    if (!await _accountabilityEnabled()) {
+      throw StateError('Система ответственности выключена');
+    }
+    final week = _weekStart(_now());
+    if (!_sameDay(proposal.weekStart, week)) {
+      throw StateError('Предложение устарело');
+    }
+    await database.database.transaction((tx) async {
+      final task = await tx.query(
+        'tasks',
+        columns: ['id', 'due_at', 'scheduled_at', 'estimated_minutes'],
+        where: "id = ? AND status IN ('planned', 'quick')",
+        whereArgs: [proposal.taskId],
+        limit: 1,
+      );
+      if (task.isEmpty) throw StateError('Задача недоступна');
+      final due = task.single['due_at'] as String?;
+      final scheduled = task.single['scheduled_at'] as String?;
+      final duration = task.single['estimated_minutes'] as int? ?? 30;
+      if (!(due != null && !DateTime.parse(due).isAfter(_now().toUtc()) ||
+          scheduled != null &&
+              !DateTime.parse(scheduled)
+                  .add(Duration(minutes: duration))
+                  .isAfter(_now()))) {
+        throw StateError('Задача больше не просрочена');
+      }
+      final sameMiss = await tx.query(
+        'accountability_events',
+        where: 'task_id = ? AND week_start = ? AND cause = ?',
+        whereArgs: [proposal.taskId, _dateKey(week), proposal.cause.name],
+        limit: 1,
+      );
+      if (sameMiss.isNotEmpty) return;
+      final duplicate = await tx.query(
+        'accountability_events',
+        where: 'id = ?',
+        whereArgs: [proposal.id],
+        limit: 1,
+      );
+      if (duplicate.isNotEmpty) return;
+      final counts = await tx.rawQuery(
+        'SELECT COUNT(*) AS count FROM accountability_events WHERE week_start = ?',
+        [_dateKey(week)],
+      );
+      final count = (counts.single['count'] as int?) ?? 0;
+      if (count >= 3) throw StateError('Достигнут недельный лимит');
+      await tx.insert('accountability_events', {
+        'id': proposal.id,
+        'task_id': proposal.taskId,
+        'week_start': _dateKey(week),
+        'cause': proposal.cause.name,
+        'points': 10,
+        'status': 'confirmed',
+        'created_at': _now().toUtc().toIso8601String(),
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    });
+  }
+
+  @override
+  Future<WeeklyReliability> reliabilityForWeek(DateTime date) async {
+    final week = _weekStart(date);
+    final rows = await database.database.rawQuery(
+      "SELECT COUNT(*) AS count FROM accountability_events WHERE week_start = ? AND status = 'confirmed'",
+      [_dateKey(week)],
+    );
+    final count = (rows.single['count'] as int?) ?? 0;
+    return WeeklyReliability(
+      weekStart: week,
+      score: (100 - count * 10).clamp(70, 100),
+      penaltyCount: count,
+      enabled: await _accountabilityEnabled(),
+    );
+  }
+
+  @override
+  Future<void> resolvePenalty(String eventId, String recoveryTaskId) async {
+    await database.database.transaction((tx) async {
+      final rows = await tx.query(
+        'accountability_events',
+        where: "id = ? AND status = 'confirmed'",
+        whereArgs: [eventId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final tasks = await tx.query(
+        'tasks',
+        columns: ['id', 'status'],
+        where: 'id = ?',
+        whereArgs: [recoveryTaskId],
+        limit: 1,
+      );
+      if (tasks.isEmpty || tasks.single['status'] != 'completed') {
+        throw StateError('Заверши восстановительный шаг');
+      }
+      final alreadyUsed = await tx.query(
+        'accountability_events',
+        columns: ['id'],
+        where: 'recovery_task_id = ?',
+        whereArgs: [recoveryTaskId],
+        limit: 1,
+      );
+      if (alreadyUsed.isNotEmpty) {
+        throw StateError('Восстановительный шаг уже использован');
+      }
+      await tx.update(
+        'accountability_events',
+        {
+          'status': 'resolved',
+          'recovery_task_id': recoveryTaskId,
+          'resolved_at': _now().toUtc().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [eventId],
+      );
+    });
+  }
+
+  @override
+  Future<void> setAccountabilityEnabled(bool enabled) async {
+    await database.database.insert('app_metadata', {
+      'key': 'accountability_enabled',
+      'value': enabled ? '1' : '0',
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  @override
+  Future<List<AccountabilityEvent>> accountabilityHistory({
+    int limit = 20,
+  }) async {
+    final rows = await database.database.rawQuery(
+      '''SELECT e.*, t.title AS task_title
+         FROM accountability_events e
+         LEFT JOIN tasks t ON t.id = e.task_id
+         ORDER BY e.created_at DESC LIMIT ?''',
+      [limit.clamp(1, 100)],
+    );
+    return rows
+        .map(
+          (row) => AccountabilityEvent(
+            id: row['id'] as String,
+            taskId: row['task_id'] as String,
+            taskTitle: row['task_title'] as String? ?? 'Задача',
+            cause: row['cause'] as String,
+            points: row['points'] as int,
+            status: row['status'] as String,
+            createdAt: DateTime.parse(row['created_at'] as String),
+            recoveryTaskId: row['recovery_task_id'] as String?,
+          ),
+        )
+        .toList();
+  }
+
+  @override
+  Future<List<RecoveryTask>> completedTasks() async {
+    final rows = await database.database.query(
+      'tasks',
+      columns: ['id', 'title'],
+      where: "status = 'completed'",
+      orderBy: 'completed_at DESC',
+      limit: 100,
+    );
+    return rows
+        .map(
+          (row) => RecoveryTask(
+            id: row['id'] as String,
+            title: row['title'] as String,
+          ),
+        )
+        .toList();
+  }
+
+  Future<bool> _accountabilityEnabled() async {
+    final rows = await database.database.query(
+      'app_metadata',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: ['accountability_enabled'],
+      limit: 1,
+    );
+    return rows.isEmpty || rows.single['value'] == '1';
+  }
+
+  DateTime _weekStart(DateTime date) {
+    final day = DateTime(date.year, date.month, date.day);
+    return day.subtract(Duration(days: day.weekday - 1));
+  }
+
+  bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 
   GameQuest _questFromRow(Map<String, Object?> row) => GameQuest(
     id: row['id'] as String,

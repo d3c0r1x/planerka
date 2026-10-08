@@ -5,6 +5,68 @@ import 'package:planerka/features/gamification/gamification_screen.dart';
 import 'package:planerka/features/gamification/gamification_service.dart';
 
 void main() {
+  testWidgets('shows weekly reliability, history and recovery action', (
+    tester,
+  ) async {
+    final game = _FakeGameData()
+      ..reliability = WeeklyReliability(
+        weekStart: DateTime(2026, 10, 5),
+        score: 80,
+        penaltyCount: 2,
+        enabled: true,
+      )
+      ..history = [
+        AccountabilityEvent(
+          id: 'penalty-1',
+          taskId: 'task-1',
+          taskTitle: 'Synthetic task',
+          cause: 'avoidableDelay',
+          points: 10,
+          status: 'confirmed',
+          createdAt: DateTime(2026, 10, 7),
+        ),
+      ]
+      ..completed = const [RecoveryTask(id: 'done-1', title: 'Разобрал почту')];
+    await tester.pumpWidget(
+      MaterialApp(home: GamificationScreen(service: game)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Надёжность недели'), findsOneWidget);
+    expect(find.text('80'), findsOneWidget);
+    expect(find.text('2 из 3 штрафов на этой неделе'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.textContaining('Причина: избегаемая задержка'),
+      250,
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Synthetic task'), findsOneWidget);
+    expect(find.textContaining('Причина: избегаемая задержка'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Снять штраф'), 150);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Снять штраф'));
+    await tester.pumpAndSettle();
+    expect(find.text('Разобрал почту'), findsOneWidget);
+    await tester.tap(find.text('Разобрал почту'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Подтвердить восстановление'));
+    await tester.pumpAndSettle();
+    expect(game.resolved, ['penalty-1:done-1']);
+  });
+
+  testWidgets('accountability can be switched off', (tester) async {
+    final game = _FakeGameData();
+    await tester.pumpWidget(
+      MaterialApp(home: GamificationScreen(service: game)),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.byType(Switch), 250);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(game.accountabilityChanges, [false]);
+  });
+
   testWidgets('game screen shows levels and quests, saves a personal reward', (
     tester,
   ) async {
@@ -17,6 +79,8 @@ void main() {
     expect(find.text('Уровень 1'), findsOneWidget);
     expect(find.text('15 XP'), findsOneWidget);
     expect(find.text('Заверши одно дело'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Первый шаг'), 250);
+    await tester.pumpAndSettle();
     expect(find.text('Первый шаг'), findsOneWidget);
 
     await tester.tap(find.text('Награда'));
@@ -37,6 +101,39 @@ class _FakeGameData implements GamificationDataSource {
   final _redeemed = <String, DateTime>{};
   var _nextId = 0;
   var _weeklyReviewed = false;
+  WeeklyReliability? reliability;
+  List<AccountabilityEvent> history = const [];
+  List<RecoveryTask> completed = const [];
+  final accountabilityChanges = <bool>[];
+  final resolved = <String>[];
+
+  @override
+  Future<WeeklyReliability> reliabilityForWeek(DateTime date) async =>
+      reliability ??
+      WeeklyReliability(
+        weekStart: DateTime(date.year, date.month, date.day),
+        score: 100,
+        penaltyCount: 0,
+        enabled: true,
+      );
+
+  @override
+  Future<void> setAccountabilityEnabled(bool enabled) async {
+    accountabilityChanges.add(enabled);
+  }
+
+  @override
+  Future<List<AccountabilityEvent>> accountabilityHistory({
+    int limit = 20,
+  }) async => history;
+
+  @override
+  Future<List<RecoveryTask>> completedTasks() async => completed;
+
+  @override
+  Future<void> resolvePenalty(String eventId, String recoveryTaskId) async {
+    resolved.add('$eventId:$recoveryTaskId');
+  }
 
   @override
   Future<void> awardWeeklyReview(DateTime date) async {

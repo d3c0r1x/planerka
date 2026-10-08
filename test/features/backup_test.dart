@@ -136,6 +136,65 @@ void main() {
   });
 
   test(
+    'v2 backup preserves accountability and accepts older v2 payloads',
+    () async {
+      await source.database.insert('app_metadata', {
+        'key': 'accountability_enabled',
+        'value': '0',
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await source.database.insert('tasks', {
+        'id': 'recovery-task',
+        'title': 'Synthetic recovery',
+        'status': 'completed',
+        'completed_at': '2026-10-08T12:00:00.000Z',
+        'created_at': '2026-10-08T11:00:00.000Z',
+        'updated_at': '2026-10-08T12:00:00.000Z',
+      });
+      await source.database.insert('accountability_events', {
+        'id': 'event-1',
+        'task_id': 'recovery-task',
+        'week_start': '2026-10-05',
+        'cause': 'avoidableDelay',
+        'points': 10,
+        'status': 'resolved',
+        'recovery_task_id': 'recovery-task',
+        'created_at': '2026-10-08T12:00:00.000Z',
+        'resolved_at': '2026-10-08T12:00:00.000Z',
+      });
+      final exported =
+          jsonDecode(await backup.exportJson()) as Map<String, dynamic>;
+      expect(
+        (exported['tables'] as Map)['accountability_events'],
+        hasLength(1),
+      );
+      await backup.importJson(jsonEncode(exported), mode: ImportMode.replace);
+      expect(
+        await source.database.query('accountability_events'),
+        hasLength(1),
+      );
+      expect(
+        (await source.database.query(
+          'app_metadata',
+          columns: ['value'],
+          where: 'key = ?',
+          whereArgs: ['accountability_enabled'],
+        )).single['value'],
+        '0',
+      );
+      final oldTables = Map<String, dynamic>.from(exported['tables'] as Map)
+        ..remove('accountability_events');
+      await backup.importJson(
+        jsonEncode({'version': 2, 'tables': oldTables}),
+        mode: ImportMode.merge,
+      );
+      expect(
+        await source.database.query('accountability_events'),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
     'private seed imports Inbox titles only once and never triages them',
     () async {
       const seed = '{"version":1,"tasks":["Задача раз","Задача два"]}';

@@ -316,6 +316,14 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
           taskId: taskId,
           onModelRequired: _openModelScreen,
           onAiSettingsRequired: _openAiSettings,
+          onConfirmPenalty: (id, cause) async {
+            final supplied = widget.gamificationDataSource;
+            final accountability = supplied is GamificationService
+                ? supplied
+                : GamificationService(database);
+            final proposal = await accountability.proposePenalty(id, cause);
+            await accountability.confirmPenalty(proposal);
+          },
         ),
       ),
     );
@@ -427,8 +435,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
               icon: Icons.emoji_events_rounded,
               color: Color(0xFFFFB84D),
             ),
-            onPressed: () => Navigator.push(
-              context,
+            onPressed: () => _navigatorKey.currentState?.push(
               MaterialPageRoute<void>(
                 builder: (_) => GamificationScreen(
                   service:
@@ -568,16 +575,14 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                 wellbeing: WellbeingRepository(widget.database!),
                 onInbox: () => _selectTab(1),
                 onFocus: () => _selectTab(2),
-                onHabits: () => Navigator.push(
-                  context,
+                onHabits: () => _navigatorKey.currentState?.push(
                   MaterialPageRoute<void>(
                     builder: (_) => HabitsScreen(
                       repository: WellbeingRepository(widget.database!),
                     ),
                   ),
                 ),
-                onJournal: () => Navigator.push(
-                  context,
+                onJournal: () => _navigatorKey.currentState?.push(
                   MaterialPageRoute<void>(
                     builder: (_) => JournalScreen(
                       repository: WellbeingRepository(widget.database!),
@@ -589,8 +594,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                 modelDownloader: _sharedModelDownloader,
                 onModel: _openModelScreen,
                 isActive: _tab == 0,
-                onChooseGoal: () => Navigator.push(
-                  context,
+                onChooseGoal: () => _navigatorKey.currentState?.push(
                   MaterialPageRoute<void>(
                     builder: (_) => GoalsScreen(
                       repository: PlanningRepository(widget.database!),

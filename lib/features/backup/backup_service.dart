@@ -37,6 +37,7 @@ class BackupService {
     'game_achievements',
     'custom_rewards',
     'task_goal_links',
+    'accountability_events',
   ];
 
   Future<String> exportJson() async {
@@ -44,9 +45,21 @@ class BackupService {
     for (final table in userTables) {
       tables[table] = await database.database.query(table);
     }
+    final accountabilityRows = await database.database.query(
+      'app_metadata',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: ['accountability_enabled'],
+      limit: 1,
+    );
     return const JsonEncoder.withIndent('  ').convert({
       'version': 2,
       'exportedAt': _now().toUtc().toIso8601String(),
+      'settings': {
+        'accountabilityEnabled':
+            accountabilityRows.isEmpty ||
+            accountabilityRows.single['value'] == '1',
+      },
       'tables': tables,
     });
   }
@@ -60,20 +73,34 @@ class BackupService {
     final version = decoded['version'] as int;
     final rawTables = decoded['tables'];
     if (rawTables is! Map<String, dynamic> ||
-        (version == 1 ? legacyUserTables : userTables).any(
-          (table) => !rawTables.containsKey(table),
-        )) {
+        (version == 1
+                ? legacyUserTables
+                : userTables.where((table) => table != 'accountability_events'))
+            .any((table) => !rawTables.containsKey(table))) {
       throw const FormatException('В резервной копии отсутствуют таблицы');
     }
     final tables = <String, List<Map<String, Object?>>>{};
     for (final table in userTables) {
-      final rows = rawTables[table] ?? (version == 1 ? <Object>[] : null);
+      final rows =
+          rawTables[table] ??
+          (version == 1 || table == 'accountability_events'
+              ? <Object>[]
+              : null);
       if (rows is! List || rows.any((row) => row is! Map)) {
         throw FormatException('Некорректные данные таблицы $table');
       }
       tables[table] = rows
           .map((row) => Map<String, Object?>.from(row as Map))
           .toList();
+    }
+    final rawSettings = decoded['settings'];
+    bool? accountabilityEnabled;
+    if (rawSettings != null) {
+      if (rawSettings is! Map<String, dynamic> ||
+          rawSettings['accountabilityEnabled'] is! bool) {
+        throw const FormatException('Некорректные настройки резервной копии');
+      }
+      accountabilityEnabled = rawSettings['accountabilityEnabled'] as bool;
     }
 
     await database.database.transaction((transaction) async {
@@ -83,13 +110,35 @@ class BackupService {
           where: 'key = ?',
           whereArgs: ['private_seed_imported'],
         );
+        final currentAccountabilitySetting = await transaction.query(
+          'app_metadata',
+          where: 'key = ?',
+          whereArgs: ['accountability_enabled'],
+        );
         await transaction.delete('app_metadata');
         if (seedMarker.isNotEmpty) {
           await transaction.insert('app_metadata', seedMarker.single);
         }
+        if (accountabilityEnabled != null) {
+          await transaction.insert('app_metadata', {
+            'key': 'accountability_enabled',
+            'value': accountabilityEnabled ? '1' : '0',
+          });
+        } else if (currentAccountabilitySetting.isNotEmpty) {
+          await transaction.insert(
+            'app_metadata',
+            currentAccountabilitySetting.single,
+          );
+        }
         for (final table in userTables.reversed) {
           await transaction.delete(table);
         }
+      }
+      if (mode == ImportMode.merge && accountabilityEnabled != null) {
+        await transaction.insert('app_metadata', {
+          'key': 'accountability_enabled',
+          'value': accountabilityEnabled ? '1' : '0',
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
       for (final table in userTables) {
         for (final row in tables[table]!) {

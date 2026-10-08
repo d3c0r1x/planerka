@@ -176,7 +176,7 @@ void main() {
     expect(
       (await upgraded.database.rawQuery('PRAGMA user_version'))
           .single['user_version'],
-      8,
+      9,
     );
   });
 
@@ -208,4 +208,64 @@ void main() {
     expect(task['scheduled_at'], isNull);
     expect(task['estimated_minutes'], isNull);
   });
+
+  test(
+    'v8 upgrade adds accountability journal and preserves user data',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'planerka_v8_upgrade_',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final path = p.join(directory.path, 'legacy-v8.db');
+      final legacy = await databaseFactoryFfi.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 8,
+          onCreate: (db, _) async {
+            await db.execute(
+              'CREATE TABLE tasks (id TEXT PRIMARY KEY, title TEXT)',
+            );
+            await db.execute(
+              'CREATE TABLE goals (id TEXT PRIMARY KEY, title TEXT)',
+            );
+            await db.execute(
+              'CREATE TABLE journal_entries (id TEXT PRIMARY KEY, text TEXT)',
+            );
+            await db.execute(
+              'CREATE TABLE xp_events (event_id TEXT PRIMARY KEY, points INTEGER)',
+            );
+          },
+        ),
+      );
+      await legacy.insert('tasks', {'id': 'task-v8', 'title': 'Synthetic'});
+      await legacy.insert('goals', {'id': 'goal-v8', 'title': 'Synthetic'});
+      await legacy.insert('journal_entries', {
+        'id': 'mood-v8',
+        'text': 'Synthetic',
+      });
+      await legacy.insert('xp_events', {'event_id': 'xp-v8', 'points': 15});
+      await legacy.close();
+      final upgraded = await AppDatabase.open(
+        path,
+        factory: databaseFactoryFfi,
+      );
+      addTearDown(upgraded.close);
+      expect((await upgraded.database.query('tasks')).single['id'], 'task-v8');
+      expect((await upgraded.database.query('goals')).single['id'], 'goal-v8');
+      expect(
+        (await upgraded.database.query('journal_entries')).single['id'],
+        'mood-v8',
+      );
+      expect(
+        (await upgraded.database.query('xp_events')).single['event_id'],
+        'xp-v8',
+      );
+      expect(await upgraded.database.query('accountability_events'), isEmpty);
+      expect(
+        (await upgraded.database.rawQuery('PRAGMA user_version'))
+            .single['user_version'],
+        9,
+      );
+    },
+  );
 }

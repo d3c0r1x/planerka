@@ -39,6 +39,7 @@ class AccountabilityEvent {
   const AccountabilityEvent({
     required this.id,
     required this.taskId,
+    required this.taskTitle,
     required this.cause,
     required this.points,
     required this.status,
@@ -48,6 +49,7 @@ class AccountabilityEvent {
 
   final String id;
   final String taskId;
+  final String taskTitle;
   final String cause;
   final int points;
   final String status;

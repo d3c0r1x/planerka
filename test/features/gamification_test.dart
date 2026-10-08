@@ -42,7 +42,7 @@ void main() {
     expect(names, contains('game_achievements'));
     expect(names, contains('custom_rewards'));
     expect(await database.database.rawQuery('PRAGMA user_version'), [
-      {'user_version': 8},
+      {'user_version': 9},
     ]);
   });
 

@@ -122,4 +122,21 @@ void main() {
     );
     expect(rows.single['value'], 'true');
   });
+
+  testWidgets('progress tab opens the accountability screen', (tester) async {
+    tester.view.physicalSize = const Size(800, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(PlanerkaApp(database: database));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('nav-progress')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Игровой прогресс'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Надёжность недели'), findsOneWidget);
+    expect(find.text('100'), findsOneWidget);
+  });
 }

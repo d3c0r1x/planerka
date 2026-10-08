@@ -17,7 +17,7 @@ class AppDatabase {
     final database = await source.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 8,
+        version: 9,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: (db, version) async {
           await db.execute('''
@@ -119,6 +119,7 @@ class AppDatabase {
             )
           ''');
           await _createGamificationTables(db);
+          await _createAccountabilityTables(db);
           await _createTaskGoalLinks(db);
           await db.execute(
             'CREATE INDEX tasks_parent_idx ON tasks(parent_task_id)',
@@ -182,6 +183,9 @@ class AppDatabase {
               );
             }
           }
+          if (oldVersion < 9) {
+            await _createAccountabilityTables(db);
+          }
         },
       ),
     );
@@ -244,6 +248,27 @@ class AppDatabase {
         redeemed_at TEXT
       )
     ''');
+  }
+
+  static Future<void> _createAccountabilityTables(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS accountability_events (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        week_start TEXT NOT NULL,
+        cause TEXT NOT NULL,
+        points INTEGER NOT NULL CHECK(points = 10),
+        status TEXT NOT NULL CHECK(status IN ('confirmed', 'resolved')),
+        recovery_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL,
+        resolved_at TEXT,
+        UNIQUE(task_id, week_start, cause),
+        UNIQUE(recovery_task_id)
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS accountability_week_idx ON accountability_events(week_start)',
+    );
   }
 
   static Future<void> _createShiftTables(DatabaseExecutor db) async {
