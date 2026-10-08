@@ -34,6 +34,7 @@ Refresh `lib/features/home/home_screen.dart`, `lib/features/planning/today_scree
 Refresh `lib/features/inbox/inbox_screen.dart` and `lib/features/goals/goals_screen.dart`.
 
 - Give Inbox one-tap capture and visible triage categories; show the unsorted count.
+- Reuse the shell's existing quick-capture flow through an optional Inbox callback; do not duplicate task insertion or change the central capture action.
 - Make one primary goal the visual hero with task fraction, percent, and next action. Keep other primary goals easy to scan.
 - Keep manual/AI triage, goal links, approval, edit, date/time, and missing-model actions available.
 - Update widget tests, including a narrow-screen overflow check.
