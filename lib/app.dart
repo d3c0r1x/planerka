@@ -48,6 +48,7 @@ class PlanerkaApp extends StatefulWidget {
 class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
   int _tab = 0;
   int _inboxVersion = 0;
+  late final PageController _pageController = PageController();
   ReminderService? _reminders;
   ThemeMode _themeMode = ThemeMode.dark;
 
@@ -107,7 +108,28 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     widget.database?.onRemindersChanged = null;
+    _pageController.dispose();
     super.dispose();
+  }
+
+  void _selectTab(int index) {
+    setState(() => _tab = index);
+    if (_pageController.hasClients && _pageController.page?.round() != index) {
+      unawaited(
+        _pageController.animateToPage(
+          index,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+        ),
+      );
+    }
+  }
+
+  Future<void> _quickCapture(String text) async {
+    final database = widget.database;
+    if (database == null) return;
+    await InboxRepository(database).add(text);
+    if (mounted) setState(() => _inboxVersion++);
   }
 
   Future<void> _add(BuildContext dialogContext) async {
@@ -152,10 +174,8 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
     if (text == null) return;
     await InboxRepository(database).add(text);
     if (mounted) {
-      setState(() {
-        _tab = 1;
-        _inboxVersion++;
-      });
+      setState(() => _inboxVersion++);
+      _selectTab(1);
     }
   }
 
@@ -296,56 +316,78 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
         ),
         body: widget.database == null
             ? const Center(child: Text('Ваш день начинается здесь'))
-            : switch (_tab) {
-                0 => HomeScreen(
-                  planning: PlanningRepository(widget.database!),
-                  wellbeing: WellbeingRepository(widget.database!),
-                  onInbox: () => setState(() => _tab = 1),
-                  onFocus: () => setState(() => _tab = 2),
-                  onHabits: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => HabitsScreen(
-                        repository: WellbeingRepository(widget.database!),
+            : PageView(
+                key: const Key('main-page-view'),
+                controller: _pageController,
+                onPageChanged: (index) {
+                  if (index != _tab) setState(() => _tab = index);
+                },
+                children: [
+                  HomeScreen(
+                    key: ValueKey('home-${_tab == 0}'),
+                    planning: PlanningRepository(widget.database!),
+                    wellbeing: WellbeingRepository(widget.database!),
+                    onInbox: () => _selectTab(1),
+                    onFocus: () => _selectTab(2),
+                    onHabits: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => HabitsScreen(
+                          repository: WellbeingRepository(widget.database!),
+                        ),
+                      ),
+                    ),
+                    onJournal: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => JournalScreen(
+                          repository: WellbeingRepository(widget.database!),
+                        ),
+                      ),
+                    ),
+                    onQuickCapture: _quickCapture,
+                    isActive: _tab == 0,
+                    onChooseGoal: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => GoalsScreen(
+                          repository: PlanningRepository(widget.database!),
+                        ),
                       ),
                     ),
                   ),
-                  onJournal: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => JournalScreen(
-                        repository: WellbeingRepository(widget.database!),
-                      ),
-                    ),
+                  InboxScreen(
+                    key: ValueKey(_inboxVersion),
+                    repository: InboxRepository(widget.database!),
                   ),
-                ),
-                1 => InboxScreen(
-                  key: ValueKey(_inboxVersion),
-                  repository: InboxRepository(widget.database!),
-                ),
-                2 => FocusScreen(
-                  engine: TimerEngine(TimerRepository(widget.database!)),
-                  planning: PlanningRepository(widget.database!),
-                ),
-                _ => ProgressScreen(service: ReviewService(widget.database!)),
-              },
+                  FocusScreen(
+                    engine: TimerEngine(TimerRepository(widget.database!)),
+                    planning: PlanningRepository(widget.database!),
+                  ),
+                  ProgressScreen(service: ReviewService(widget.database!)),
+                ],
+              ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _tab,
-          onDestinationSelected: (index) => setState(() => _tab = index),
-          destinations: const [
+          onDestinationSelected: _selectTab,
+          destinations: [
             NavigationDestination(
+              key: const ValueKey('nav-today'),
               icon: Icon(Icons.today_rounded),
               label: 'Сегодня',
             ),
             NavigationDestination(
+              key: const ValueKey('nav-inbox'),
               icon: Icon(Icons.inbox_rounded),
               label: 'Inbox',
             ),
             NavigationDestination(
+              key: const ValueKey('nav-focus'),
               icon: Icon(Icons.timer_outlined),
               label: 'Фокус',
             ),
             NavigationDestination(
+              key: const ValueKey('nav-progress'),
               icon: Icon(Icons.insights_rounded),
               label: 'Прогресс',
             ),

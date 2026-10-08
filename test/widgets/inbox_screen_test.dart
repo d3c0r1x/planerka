@@ -29,8 +29,12 @@ void main() {
     await tester.pumpWidget(PlanerkaApp(database: database));
     await tester.tap(find.byTooltip('Добавить'));
     await tester.pumpAndSettle();
-    expect(find.byType(TextField), findsOneWidget);
-    await tester.enterText(find.byType(TextField), 'Купить корм');
+    final dialogInput = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(TextField),
+    );
+    expect(dialogInput, findsOneWidget);
+    await tester.enterText(dialogInput, 'Купить корм');
     await tester.tap(find.text('Сохранить'));
     await tester.pumpAndSettle();
 

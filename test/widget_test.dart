@@ -7,6 +7,7 @@ void main() {
     await tester.pumpWidget(const PlanerkaApp());
 
     expect(find.text('Планерка'), findsOneWidget);
+    expect(find.byKey(const Key('nav-today')), findsOneWidget);
     expect(find.text('Ваш день начинается здесь'), findsOneWidget);
     expect(find.byIcon(Icons.add_rounded), findsOneWidget);
   });

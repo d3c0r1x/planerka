@@ -4,9 +4,14 @@ import '../../core/models.dart';
 import 'planning_repository.dart';
 
 class TodayScreen extends StatefulWidget {
-  const TodayScreen({super.key, required this.repository});
+  const TodayScreen({
+    super.key,
+    required this.repository,
+    this.interactive = true,
+  });
 
   final PlanningRepository repository;
+  final bool interactive;
 
   @override
   State<TodayScreen> createState() => _TodayScreenState();
@@ -87,17 +92,17 @@ class _TodayScreenState extends State<TodayScreen> {
           if (backlog)
             IconButton(
               tooltip: 'На сегодня',
-              onPressed: () => _selectToday(task),
+              onPressed: widget.interactive ? () => _selectToday(task) : null,
               icon: const Icon(Icons.today_rounded),
             ),
           IconButton(
             tooltip: 'Назначить срок',
-            onPressed: () => _schedule(task),
+              onPressed: widget.interactive ? () => _schedule(task) : null,
             icon: const Icon(Icons.event_rounded),
           ),
           IconButton(
             tooltip: 'Завершить',
-            onPressed: () => _complete(task),
+              onPressed: widget.interactive ? () => _complete(task) : null,
             icon: const Icon(Icons.check_circle_outline_rounded),
           ),
         ],

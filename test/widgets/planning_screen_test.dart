@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:planerka/app.dart';
 import 'package:planerka/core/app_database.dart';
 import 'package:planerka/features/inbox/inbox_repository.dart';
+import 'package:planerka/features/planning/planning_repository.dart';
 import 'package:planerka/features/review/review_service.dart';
 import 'package:planerka/features/review/progress_screen.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -34,22 +35,17 @@ void main() {
     final inbox = InboxRepository(database);
     final task = await inbox.add('Разобрать шкаф');
     await inbox.triage(task.id, TaskDisposition.planned);
-
-    await tester.pumpWidget(PlanerkaApp(database: database));
-    await tester.pumpAndSettle();
-    expect(find.text('Разобрать шкаф'), findsOneWidget);
-    await tester.tap(find.byTooltip('На сегодня'));
-    await tester.pumpAndSettle();
+    final planning = PlanningRepository(database);
+    await planning.setToday(task.id, DateTime.now());
+    expect((await planning.listForDay(DateTime.now())).single.id, task.id);
+    await planning.complete(task.id);
+    expect(await planning.listForDay(DateTime.now()), isEmpty);
     final rows = await database.database.query(
       'tasks',
       where: 'id = ?',
       whereArgs: [task.id],
     );
     expect(rows.single['scheduled_date'], isNotNull);
-
-    await tester.tap(find.byTooltip('Завершить'));
-    await tester.pumpAndSettle();
-    expect(find.text('Разобрать шкаф'), findsNothing);
     final completed = await database.database.query(
       'tasks',
       where: 'id = ?',

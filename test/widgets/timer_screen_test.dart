@@ -34,7 +34,9 @@ void main() {
     await inbox.triage(task.id, TaskDisposition.quick);
 
     await tester.pumpWidget(PlanerkaApp(database: database));
-    await tester.tap(find.text('Фокус'));
+    await tester.tap(find.text('Прогресс'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Фокус').last);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('focusTaskPicker')));
     await tester.pumpAndSettle();
@@ -57,7 +59,9 @@ void main() {
 
   testWidgets('delay records outcome and breathing opens', (tester) async {
     await tester.pumpWidget(PlanerkaApp(database: database));
-    await tester.tap(find.text('Фокус'));
+    await tester.tap(find.text('Прогресс'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Фокус').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Отсрочка'));
     await tester.pumpAndSettle();

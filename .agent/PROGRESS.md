@@ -194,8 +194,16 @@ G12 verification: 55 tests, analyzer, APK build/install passed.
 - Approved execution plan: `.agent/PLAN_REDESIGN_2026-10-08.md`. Scope is directly authorized by the user's request; earlier AI approval rule persists: recommendations and task changes require user confirmation.
 - Starting repository state: `develop` clean at `8068d16`; prior full suite 81 PASS, analyzer clean, release APK built; prior emulator API25 x86_64 cannot run minSdk28 arm64 build.
 - New goals: R1 home shell/visual system; R2 primary goal and task progress with AI decomposition; R3 deadline-aware planner and Inbox AI; R4 background model download/global status; R5 compatible-emulator E2E, APK, privacy and publication.
-- Status: PLAN_RECORDED; re-run baseline and provision API35 x86_64 emulator before R1.
+- Status: R1 COMPLETE; R2 NEXT. API35 provisioning failed to start; investigate SDK/network before R5.
 
 - Baseline rerun 2026-10-08: `flutter analyze` clean; `flutter test --reporter compact` 81 PASS.
 - Emulator provisioning: Android API35 Google APIs x86_64 system image requested through sdkmanager; free C: before install 24.75 GB. Flutter-configured JDK 17 path: Unity Android OpenJDK.
-- R1 starts after API35 image install proceeds; APK validation will build x86_64 for emulator and arm64 for phone delivery.
+- Emulator validation will build x86_64 for the compatible API35 AVD and arm64 for phone delivery.
+
+### R1 — Home shell and visual system
+
+- Статус: COMPLETE; commit pending.
+- Добавлены тёмная цветная тема, градиентные панели, press animation/haptics, progress pills, быстрый Home Inbox, дневной прогресс/сроки, цветные действия, swipe PageView с синхронизацией NavigationBar.
+- RED: новые тесты подтверждали отсутствие Home capture и swipe shell.
+- GREEN: `flutter test --reporter compact` — 83 PASS; `flutter analyze` — чисто; `git diff --check` — PASS.
+- API35 образ не установлен: sdkmanager-процесс завершился/отсутствует, временный архив образа не появился. Проверка на эмуляторе впереди.
