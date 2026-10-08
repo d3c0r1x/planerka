@@ -18,10 +18,12 @@ class ModelScreen extends StatefulWidget {
     this.downloader,
     this.modelStore,
     this.database,
+    this.enableBackgroundDownload = false,
   });
   final ModelDownloader? downloader;
   final ModelStore? modelStore;
   final AppDatabase? database;
+  final bool enableBackgroundDownload;
 
   @override
   State<ModelScreen> createState() => _ModelScreenState();
@@ -35,10 +37,16 @@ class _ModelScreenState extends State<ModelScreen> {
     ModelDownloadStatus.checking,
   );
   bool _loading = true;
+  StreamSubscription<ModelDownloadState>? _backgroundSubscription;
 
   @override
   void initState() {
     super.initState();
+    _backgroundSubscription = widget.downloader?.backgroundStates.listen((
+      state,
+    ) {
+      if (mounted) setState(() => _state = state);
+    });
     unawaited(_initialize());
   }
 
@@ -74,6 +82,14 @@ class _ModelScreenState extends State<ModelScreen> {
     final downloader = _downloader;
     if (downloader == null) return;
     await _subscription?.cancel();
+    if (widget.enableBackgroundDownload) {
+      setState(
+        () =>
+            _state = const ModelDownloadState(ModelDownloadStatus.downloading),
+      );
+      unawaited(downloader.runNativeInBackground(Qwen3ModelManifest.manifest));
+      return;
+    }
     _subscription = downloader.download(Qwen3ModelManifest.manifest).listen((
       state,
     ) {
@@ -109,6 +125,7 @@ class _ModelScreenState extends State<ModelScreen> {
   }
 
   Future<void> _cancel() async {
+    await _downloader?.cancelNative();
     await _subscription?.cancel();
     await _store?.remove(Qwen3ModelManifest.manifest);
     if (mounted) {
@@ -121,7 +138,8 @@ class _ModelScreenState extends State<ModelScreen> {
   @override
   void dispose() {
     unawaited(_subscription?.cancel());
-    _downloader?.close();
+    unawaited(_backgroundSubscription?.cancel());
+    if (widget.downloader == null) _downloader?.close();
     super.dispose();
   }
 
@@ -158,14 +176,22 @@ class _ModelScreenState extends State<ModelScreen> {
                             key: const ValueKey('model-not-installed-banner'),
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.tertiaryContainer,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .tertiaryContainer,
                               borderRadius: BorderRadius.circular(16),
                             ),
-                            child: const Row(children: [
-                              Icon(Icons.cloud_download_rounded),
-                              SizedBox(width: 10),
-                              Expanded(child: Text('Локальная модель ещё не установлена. Скачайте её, чтобы включить ИИ.')),
-                            ]),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.cloud_download_rounded),
+                                SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Локальная модель ещё не установлена. Скачайте её, чтобы включить ИИ.',
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                         const SizedBox(height: 18),
@@ -191,7 +217,9 @@ class _ModelScreenState extends State<ModelScreen> {
                                 _state.receivedBytes > 0) ...[
                           LinearProgressIndicator(value: _state.progress),
                           const SizedBox(height: 8),
-                          Text('Загрузка продолжается, даже если закрыть этот экран.'),
+                          Text(
+                            'Загрузка продолжается, даже если закрыть этот экран.',
+                          ),
                           const SizedBox(height: 8),
                           Text(
                             '${(_state.receivedBytes / 1000000).toStringAsFixed(0)} / ${(_state.totalBytes / 1000000).toStringAsFixed(0)} МБ',
@@ -246,8 +274,12 @@ class _ModelScreenState extends State<ModelScreen> {
                           )
                         else if (downloading)
                           OutlinedButton.icon(
-                            onPressed: () {
-                              _downloader?.pause();
+                            onPressed: () async {
+                              if (widget.enableBackgroundDownload) {
+                                await _downloader?.pauseNative();
+                              } else {
+                                _downloader?.pause();
+                              }
                               setState(
                                 () => _state = ModelDownloadState(
                                   ModelDownloadStatus.paused,

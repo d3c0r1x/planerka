@@ -13,6 +13,16 @@ import 'features/goals/goals_screen.dart';
 import 'features/gamification/gamification_screen.dart';
 import 'features/gamification/gamification_service.dart';
 import 'features/ai/model/model_screen.dart';
+import 'features/ai/model/model_manifest.dart';
+import 'features/ai/model/model_store.dart';
+import 'features/ai/model/local_ai_engine.dart';
+import 'features/ai/model/model_downloader.dart';
+import 'features/ai/planning/ai_recommendation_service.dart';
+
+import 'dart:io';
+
+import 'package:path_provider/path_provider.dart';
+
 import 'features/backup/backup_screen.dart';
 import 'features/backup/backup_service.dart';
 import 'features/planning/calendar_screen.dart';
@@ -50,6 +60,8 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
   int _inboxVersion = 0;
   late final PageController _pageController = PageController();
   ReminderService? _reminders;
+  ModelStore? _modelStore;
+  ModelDownloader? _sharedModelDownloader;
   ThemeMode _themeMode = ThemeMode.dark;
 
   @override
@@ -59,6 +71,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
     final database = widget.database;
     if (database != null) {
       unawaited(_loadThemeMode());
+      unawaited(_initializeModelStore());
       _reminders = ReminderService(
         database,
         widget.notificationPort ?? LocalNotificationPort(),
@@ -118,7 +131,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
       unawaited(
         _pageController.animateToPage(
           index,
-          duration: const Duration(milliseconds: 280),
+          duration: const Duration(milliseconds: 240),
           curve: Curves.easeOutCubic,
         ),
       );
@@ -131,6 +144,35 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
     await InboxRepository(database).add(text);
     if (mounted) setState(() => _inboxVersion++);
   }
+
+  Future<void> _initializeModelStore() async {
+    final root = await getApplicationSupportDirectory();
+    if (!mounted) return;
+    setState(() {
+      _modelDirectoryPath = '${root.path}/models';
+      _modelStore = ModelStore(
+        LocalModelFileStore(Directory(_modelDirectoryPath!)),
+      );
+      _sharedModelDownloader = ModelDownloader(
+        IoModelTransport(),
+        _modelStore!,
+      );
+    });
+    unawaited(_sharedModelDownloader!.initializeBackground());
+  }
+
+  AiRecommendationService? _localAiService() {
+    final database = widget.database;
+    if (database == null) return null;
+    final modelStore = _modelStore;
+    if (modelStore == null) return null;
+    return AiRecommendationService(
+      database,
+      LocalAiEngine(store: modelStore, manifest: Qwen3ModelManifest.manifest),
+    );
+  }
+
+  String? _modelDirectoryPath;
 
   Future<void> _add(BuildContext dialogContext) async {
     final database = widget.database;
@@ -293,7 +335,12 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                         'journal' => JournalScreen(
                           repository: WellbeingRepository(widget.database!),
                         ),
-                        'model' => ModelScreen(database: widget.database),
+                        'model' => ModelScreen(
+                          database: widget.database,
+                          downloader: _sharedModelDownloader,
+                          modelStore: _modelStore,
+                          enableBackgroundDownload: true,
+                        ),
                         _ => BackupScreen(
                           service: BackupService(widget.database!),
                         ),
@@ -322,6 +369,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                 onPageChanged: (index) {
                   if (index != _tab) setState(() => _tab = index);
                 },
+                physics: const PageScrollPhysics(),
                 children: [
                   HomeScreen(
                     key: ValueKey('home-${_tab == 0}'),
@@ -346,6 +394,19 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                       ),
                     ),
                     onQuickCapture: _quickCapture,
+                    modelStore: _modelStore,
+                    modelDownloader: _sharedModelDownloader,
+                    onModel: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => ModelScreen(
+                          database: widget.database,
+                          downloader: _sharedModelDownloader,
+                          modelStore: _modelStore,
+                          enableBackgroundDownload: true,
+                        ),
+                      ),
+                    ),
                     isActive: _tab == 0,
                     onChooseGoal: () => Navigator.push(
                       context,
@@ -359,6 +420,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                   InboxScreen(
                     key: ValueKey(_inboxVersion),
                     repository: InboxRepository(widget.database!),
+                    ai: _localAiService(),
                   ),
                   FocusScreen(
                     engine: TimerEngine(TimerRepository(widget.database!)),

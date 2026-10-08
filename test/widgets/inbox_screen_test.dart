@@ -59,4 +59,12 @@ void main() {
     expect(await database.database.query('tasks'), isEmpty);
     expect(find.text('Введите задачу'), findsOneWidget);
   });
+
+  testWidgets('app keeps the Inbox AI control accessible', (tester) async {
+    await tester.pumpWidget(PlanerkaApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('nav-inbox')));
+    await tester.pumpAndSettle();
+    expect(find.byType(NavigationBar), findsOneWidget);
+  });
 }

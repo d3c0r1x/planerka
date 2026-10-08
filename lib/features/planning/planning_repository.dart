@@ -33,6 +33,20 @@ class PlanningRepository {
     await database.remindersChanged();
   }
 
+  Future<void> setReminder(String taskId, DateTime remindAt) async {
+    final changed = await database.database.update(
+      'tasks',
+      {
+        'remind_at': remindAt.toUtc().toIso8601String(),
+        'updated_at': _now().toUtc().toIso8601String(),
+      },
+      where: "id = ? AND status NOT IN ('completed', 'deleted')",
+      whereArgs: [taskId],
+    );
+    if (changed != 1) throw StateError('Задача больше недоступна');
+    await database.remindersChanged();
+  }
+
   Future<void> setToday(String taskId, DateTime date) async {
     await database.database.update(
       'tasks',
@@ -202,11 +216,10 @@ class PlanningRepository {
       );
       if (exists.isEmpty) throw StateError('Цель больше не существует');
     }
-    await database.database.insert(
-      'app_metadata',
-      {'key': 'primary_goal_id', 'value': goalId ?? ''},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await database.database.insert('app_metadata', {
+      'key': 'primary_goal_id',
+      'value': goalId ?? '',
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<Goal?> primaryGoal() async {
@@ -269,11 +282,16 @@ class PlanningRepository {
   Future<void> addGoalActions(String goalId, List<String> titles) async {
     final values = titles.map((title) => title.trim()).toList();
     if (values.isEmpty) return;
-    if (values.length > 12 || values.any((title) => title.isEmpty || title.length > 160)) {
+    if (values.length > 12 ||
+        values.any((title) => title.isEmpty || title.length > 160)) {
       throw ArgumentError('Недопустимый список шагов');
     }
     await database.database.transaction((tx) async {
-      final goal = await tx.query('goals', where: 'id = ?', whereArgs: [goalId]);
+      final goal = await tx.query(
+        'goals',
+        where: 'id = ?',
+        whereArgs: [goalId],
+      );
       if (goal.isEmpty) throw StateError('Цель больше не существует');
       final project = await tx.query(
         'projects',
@@ -284,7 +302,9 @@ class PlanningRepository {
         limit: 1,
       );
       final now = _now().toUtc().toIso8601String();
-      final projectId = project.isEmpty ? _newId() : project.single['id'] as String;
+      final projectId = project.isEmpty
+          ? _newId()
+          : project.single['id'] as String;
       if (project.isEmpty) {
         await tx.insert('projects', {
           'id': projectId,

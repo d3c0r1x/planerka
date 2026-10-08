@@ -58,6 +58,14 @@ class _TodayScreenState extends State<TodayScreen> {
   }
 
   Future<void> _schedule(TaskEntry task) async {
+    await _pickDateTime(task, reminder: false);
+  }
+
+  Future<void> _setReminder(TaskEntry task) async {
+    await _pickDateTime(task, reminder: true);
+  }
+
+  Future<void> _pickDateTime(TaskEntry task, {required bool reminder}) async {
     final now = DateTime.now();
     final date = await showDatePicker(
       context: context,
@@ -71,10 +79,18 @@ class _TodayScreenState extends State<TodayScreen> {
       initialTime: const TimeOfDay(hour: 9, minute: 0),
     );
     if (time == null) return;
-    await widget.repository.schedule(
-      task.id,
-      DateTime(date.year, date.month, date.day, time.hour, time.minute),
+    final at = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
     );
+    if (reminder) {
+      await widget.repository.setReminder(task.id, at);
+    } else {
+      await widget.repository.schedule(task.id, at);
+    }
     if (mounted) _refresh();
   }
 
@@ -96,13 +112,18 @@ class _TodayScreenState extends State<TodayScreen> {
               icon: const Icon(Icons.today_rounded),
             ),
           IconButton(
+            tooltip: 'Напомнить',
+            onPressed: widget.interactive ? () => _setReminder(task) : null,
+            icon: const Icon(Icons.notifications_active_rounded),
+          ),
+          IconButton(
             tooltip: 'Назначить срок',
-              onPressed: widget.interactive ? () => _schedule(task) : null,
+            onPressed: widget.interactive ? () => _schedule(task) : null,
             icon: const Icon(Icons.event_rounded),
           ),
           IconButton(
             tooltip: 'Завершить',
-              onPressed: widget.interactive ? () => _complete(task) : null,
+            onPressed: widget.interactive ? () => _complete(task) : null,
             icon: const Icon(Icons.check_circle_outline_rounded),
           ),
         ],

@@ -12,6 +12,7 @@ abstract interface class ModelFileStore {
     List<int> bytes, {
     bool append = true,
   });
+  Future<void> installDownloaded(String sourcePath, String fileName);
   Future<bool> installedExists(String fileName);
   String installedPath(String fileName);
   Stream<List<int>> readInstalled(String fileName);
@@ -35,6 +36,10 @@ class ModelStore {
   }
 
   Future<bool> installPartial(ModelManifest manifest) async {
+    if (await files.partialLength(manifest.fileName) !=
+        manifest.expectedBytes) {
+      return false;
+    }
     if (await _digest(files.readPartial(manifest.fileName)) !=
         manifest.sha256) {
       return false;
@@ -104,6 +109,17 @@ class LocalModelFileStore implements ModelFileStore {
   }
 
   @override
+  Future<void> installDownloaded(String sourcePath, String fileName) async {
+    await _ensure();
+    final source = File(sourcePath);
+    final part = _partial(fileName);
+    if (source.absolute.path == part.absolute.path) return;
+    if (await part.exists()) await part.delete();
+    await source.copy(part.path);
+    await source.delete();
+  }
+
+  @override
   Future<void> delete(String fileName) async {
     for (final file in [_partial(fileName), _installed(fileName)]) {
       if (await file.exists()) await file.delete();
@@ -141,6 +157,8 @@ class MemoryModelFileStore implements ModelFileStore {
     List<int> bytes, {
     bool append = true,
   }) async => partial = [...(append ? partial : <int>[]), ...bytes];
+  @override
+  Future<void> installDownloaded(String sourcePath, String fileName) async {}
   @override
   Future<void> install(String fileName) async {
     installed = [...partial];

@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../../core/models.dart';
+import '../ai/planning/ai_recommendation_service.dart';
 import 'inbox_repository.dart';
 import 'triage.dart';
 
 class InboxScreen extends StatefulWidget {
-  const InboxScreen({super.key, required this.repository});
+  const InboxScreen({super.key, required this.repository, this.ai});
 
   final InboxRepository repository;
+  final AiRecommendationService? ai;
 
   @override
   State<InboxScreen> createState() => _InboxScreenState();
@@ -15,6 +17,7 @@ class InboxScreen extends StatefulWidget {
 
 class _InboxScreenState extends State<InboxScreen> {
   late Future<List<TaskEntry>> _entries;
+  bool _aiLoading = false;
 
   @override
   void initState() {
@@ -61,6 +64,82 @@ class _InboxScreenState extends State<InboxScreen> {
     if (mounted) _refresh();
   }
 
+  Future<void> _suggestTriage() async {
+    final ai = widget.ai;
+    if (ai == null || _aiLoading) return;
+    setState(() => _aiLoading = true);
+    try {
+      final suggestion = await ai.classifyInbox();
+      if (!mounted || suggestion.items.isEmpty) return;
+      final selected = <String>{...suggestion.items.map((item) => item.taskId)};
+      final accepted = await showDialog<Set<String>>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, update) => AlertDialog(
+            title: const Text('Разбор Inbox от ИИ'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: ListView(
+                shrinkWrap: true,
+                children: suggestion.items
+                    .map(
+                      (item) => CheckboxListTile(
+                        key: ValueKey('ai-inbox-${item.taskId}'),
+                        value: selected.contains(item.taskId),
+                        title: Text(suggestion.titles[item.taskId] ?? 'Задача'),
+                        subtitle: Text(
+                          '${_dispositionTitle(item.disposition)} · ${item.reason}',
+                        ),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        onChanged: (value) => update(() {
+                          if (value == true) {
+                            selected.add(item.taskId);
+                          } else {
+                            selected.remove(item.taskId);
+                          }
+                        }),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Отмена'),
+              ),
+              FilledButton(
+                onPressed: selected.isEmpty
+                    ? null
+                    : () => Navigator.pop(context, selected),
+                child: const Text('Применить выбранное'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (accepted == null || accepted.isEmpty) return;
+      await ai.applyInboxSelected(suggestion, accepted);
+      if (mounted) _refresh();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ИИ не смог разобрать Inbox: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _aiLoading = false);
+    }
+  }
+
+  String _dispositionTitle(String value) => switch (value) {
+    'quick' => 'Сделать быстро',
+    'planned' => 'Запланировать',
+    'project' => 'Большой проект',
+    'deleted' => 'Удалить',
+    _ => 'Проверить',
+  };
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<TaskEntry>>(
@@ -75,15 +154,29 @@ class _InboxScreenState extends State<InboxScreen> {
           return const Center(child: CircularProgressIndicator());
         }
         final entries = snapshot.data!;
-        if (entries.isEmpty) {
+        if (entries.isEmpty && widget.ai == null) {
           return const Center(child: Text('Inbox пуст. Добавьте любую мысль.'));
         }
         return ListView.separated(
           padding: const EdgeInsets.all(16),
-          itemCount: entries.length,
+          itemCount: entries.length + (widget.ai == null ? 0 : 1),
           separatorBuilder: (context, index) => const SizedBox(height: 8),
           itemBuilder: (context, index) {
-            final entry = entries[index];
+            if (widget.ai != null && index == 0) {
+              return Card(
+                child: ListTile(
+                  key: const ValueKey('ai-inbox-triage'),
+                  leading: const Icon(Icons.auto_awesome_rounded),
+                  title: const Text('Умный разбор'),
+                  subtitle: const Text('ИИ предложит категории и причины'),
+                  trailing: _aiLoading
+                      ? const CircularProgressIndicator()
+                      : const Icon(Icons.chevron_right_rounded),
+                  onTap: _aiLoading ? null : _suggestTriage,
+                ),
+              );
+            }
+            final entry = entries[index - (widget.ai == null ? 0 : 1)];
             return Card(
               child: ListTile(
                 title: Text(entry.title),

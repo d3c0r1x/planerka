@@ -49,7 +49,7 @@ void main() {
     final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
     expect(app.themeMode, ThemeMode.dark);
     expect(find.text('Твой день, твой ритм'), findsOneWidget);
-    expect(find.text('Подготовить день'), findsOneWidget);
+    expect(find.byKey(const ValueKey('today-screen-true')), findsOneWidget);
     expect(find.byKey(const Key('home-day-progress')), findsOneWidget);
     expect(find.text('Inbox'), findsAtLeastNWidgets(1));
     expect(find.text('Таймер'), findsOneWidget);

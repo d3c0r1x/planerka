@@ -38,12 +38,19 @@ class ReminderService {
       final now = _now().toUtc();
       final taskRows = await database.database.query(
         'tasks',
-        where: "due_at IS NOT NULL AND status NOT IN ('completed', 'deleted', 'project')",
+        where: "(due_at IS NOT NULL OR remind_at IS NOT NULL) AND status NOT IN ('completed', 'deleted', 'project')",
       );
       for (final row in taskRows) {
-        final due = DateTime.parse(row['due_at'] as String).toUtc();
+        final remind = row['remind_at'] as String?;
+        final dueText = (remind?.isNotEmpty ?? false)
+            ? remind!
+            : row['due_at'] as String;
+        final due = DateTime.parse(dueText).toUtc();
         if (due.isAfter(now)) {
-          desired[_id('task:${row['id']}')] = (row['title'] as String, due);
+          final bodyTitle = (remind?.isNotEmpty ?? false)
+              ? 'Напоминание: ${row['title'] as String}'
+              : 'Срок задачи: ${row['title'] as String}';
+          desired[_id('task:${row['id']}')] = (bodyTitle, due);
         }
       }
       final timerRows = await database.database.query(

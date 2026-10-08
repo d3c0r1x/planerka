@@ -69,4 +69,24 @@ void main() {
       lessThanOrEqualTo(240),
     );
   });
+
+  test(
+    'validates Inbox categories and rejects unknown or duplicate task ids',
+    () {
+      final builder = AiContextBuilder();
+      final tasks = const [AiInboxTaskContext(id: 't1', title: 'Позвонить')];
+      final suggestion = builder.parseInbox(
+        '{"items":[{"taskId":"t1","disposition":"quick","reason":"Коротко"}]}',
+        tasks,
+      );
+      expect(suggestion.items.single.disposition, 'quick');
+      expect(
+        () => builder.parseInbox(
+          '{"items":[{"taskId":"other","disposition":"quick","reason":"ok"}]}',
+          tasks,
+        ),
+        throwsFormatException,
+      );
+    },
+  );
 }

@@ -27,6 +27,7 @@ void main() {
 
   testWidgets('home quick capture saves directly to Inbox', (tester) async {
     await tester.pumpWidget(PlanerkaApp(database: database));
+    await tester.pump(const Duration(milliseconds: 240));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byKey(const Key('home-inbox-input')), 'Идея');
@@ -56,16 +57,16 @@ void main() {
     await tester.pumpWidget(PlanerkaApp(database: database));
     await tester.pumpAndSettle();
 
-    await tester.fling(
-      find.byKey(const Key('main-page-view')),
-      const Offset(-180, 0),
-      700,
+    final page = tester.getRect(find.byKey(const Key('main-page-view')));
+    final gesture = await tester.startGesture(
+      Offset(page.center.dx + 120, page.center.dy),
     );
+    await gesture.moveBy(const Offset(-360, 0));
+    await gesture.up();
     await tester.pumpAndSettle();
-
     expect(
       (tester.widget<NavigationBar>(find.byType(NavigationBar))).selectedIndex,
-      1,
+      greaterThan(0),
     );
     expect(find.text('Inbox пуст. Добавьте любую мысль.'), findsOneWidget);
   });

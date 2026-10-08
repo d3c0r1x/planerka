@@ -76,6 +76,21 @@ void main() {
     expect(notifications.scheduled, isEmpty);
   });
 
+  test(
+    'explicit task reminder is persisted and cancelled on completion',
+    () async {
+      final task = await InboxRepository(database).add('Позвонить');
+      final at = now.add(const Duration(minutes: 30));
+      final planning = PlanningRepository(database);
+      await planning.setReminder(task.id, at);
+      await reminders.rescheduleAll();
+      expect(notifications.scheduled.values.single, at);
+      await planning.complete(task.id);
+      await reminders.rescheduleAll();
+      expect(notifications.scheduled, isEmpty);
+    },
+  );
+
   test('running timer is restored; pause and finish cancel it', () async {
     final task = await InboxRepository(database).add('Вымышленная задача');
     final engine = TimerEngine(TimerRepository(database), now: () => now);

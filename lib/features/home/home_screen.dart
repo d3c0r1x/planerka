@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/app_theme.dart';
 import '../../core/widgets/pressable_panel.dart';
 import '../../core/models.dart';
+import '../ai/model/model_downloader.dart';
+import '../ai/model/model_manifest.dart';
+import '../ai/model/model_store.dart';
 import '../planning/planning_repository.dart';
 import '../planning/today_screen.dart';
 import '../wellbeing/wellbeing_repository.dart';
@@ -18,6 +23,9 @@ class HomeScreen extends StatefulWidget {
     required this.onHabits,
     required this.onJournal,
     required this.onQuickCapture,
+    this.modelStore,
+    this.modelDownloader,
+    required this.onModel,
     this.isActive = true,
     required this.onChooseGoal,
   });
@@ -29,6 +37,9 @@ class HomeScreen extends StatefulWidget {
   final VoidCallback onHabits;
   final VoidCallback onJournal;
   final Future<void> Function(String text) onQuickCapture;
+  final ModelStore? modelStore;
+  final ModelDownloader? modelDownloader;
+  final VoidCallback onModel;
   final bool isActive;
   final VoidCallback onChooseGoal;
 
@@ -94,6 +105,12 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 10),
               _PrimaryGoalCard(onTap: widget.onChooseGoal),
               const SizedBox(height: 9),
+              _ModelStatusCard(
+                store: widget.modelStore,
+                downloader: widget.modelDownloader,
+                onOpen: widget.onModel,
+              ),
+              const SizedBox(height: 9),
               _QuickInboxInput(
                 controller: _input,
                 onSubmit: _capture,
@@ -145,12 +162,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         Expanded(
-          child: widget.isActive
-              ? TodayScreen(
-                  key: const ValueKey('today-screen'),
-                  repository: widget.planning,
-                )
-              : const SizedBox.shrink(),
+          child: TodayScreen(
+            key: ValueKey('today-screen-${widget.isActive}'),
+            repository: widget.planning,
+          ),
         ),
       ],
     );
@@ -165,8 +180,7 @@ class _PrimaryGoalCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return FutureBuilder<Goal?>(
-      future: (context.findAncestorWidgetOfExactType<HomeScreen>())!
-          .planning
+      future: (context.findAncestorWidgetOfExactType<HomeScreen>())!.planning
           .primaryGoal(),
       builder: (context, snapshot) {
         final goal = snapshot.data;
@@ -186,82 +200,217 @@ class _PrimaryGoalCard extends StatelessWidget {
             border: Border.all(color: colors.primary.withValues(alpha: 0.22)),
           ),
           child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: colors.primary.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Icon(Icons.flag_rounded, color: colors.primary),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'ГЛАВНАЯ ЦЕЛЬ',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: colors.onPrimaryContainer.withValues(alpha: 0.72),
-                    letterSpacing: 1.1,
-                    fontWeight: FontWeight.w800,
-                  ),
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: colors.primary.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(15),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  goal?.title ?? 'Выбрать цель',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: colors.onPrimaryContainer,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                if (goal != null)
-                  FutureBuilder<({int completed, int active})>(
-                    future: (context.findAncestorWidgetOfExactType<HomeScreen>())!
-                        .planning.goalTaskCounts(goal.id),
-                    builder: (context, counts) {
-                      final value = counts.data;
-                      final total = (value?.completed ?? 0) + (value?.active ?? 0);
-                      return Text(
-                        '${value?.completed ?? 0} из $total шагов выполнено',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: colors.onPrimaryContainer.withValues(alpha: 0.76),
+                child: Icon(Icons.flag_rounded, color: colors.primary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'ГЛАВНАЯ ЦЕЛЬ',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: colors.onPrimaryContainer.withValues(
+                          alpha: 0.72,
                         ),
-                      );
-                    },
-                  ),
-              ],
-            ),
-          ),
-          if (goal != null)
-            FutureBuilder<({int completed, int active})>(
-              future: (context.findAncestorWidgetOfExactType<HomeScreen>())!
-                  .planning
-                  .goalTaskCounts(goal.id),
-              builder: (context, counts) {
-                final value = counts.data;
-                final total = (value?.completed ?? 0) + (value?.active ?? 0);
-                return ProgressPill(
+                        letterSpacing: 1.1,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      goal?.title ?? 'Выбрать цель',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: colors.onPrimaryContainer,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (goal != null)
+                      FutureBuilder<({int completed, int active})>(
+                        future:
+                            (context
+                                    .findAncestorWidgetOfExactType<
+                                      HomeScreen
+                                    >())!
+                                .planning
+                                .goalTaskCounts(goal.id),
+                        builder: (context, counts) {
+                          final value = counts.data;
+                          final total =
+                              (value?.completed ?? 0) + (value?.active ?? 0);
+                          return Text(
+                            '${value?.completed ?? 0} из $total шагов выполнено',
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: colors.onPrimaryContainer.withValues(
+                                    alpha: 0.76,
+                                  ),
+                                ),
+                          );
+                        },
+                      ),
+                  ],
+                ),
+              ),
+              if (goal != null)
+                FutureBuilder<({int completed, int active})>(
+                  future: (context.findAncestorWidgetOfExactType<HomeScreen>())!
+                      .planning
+                      .goalTaskCounts(goal.id),
+                  builder: (context, counts) {
+                    final value = counts.data;
+                    final total =
+                        (value?.completed ?? 0) + (value?.active ?? 0);
+                    return ProgressPill(
+                      icon: Icons.auto_awesome_rounded,
+                      label: '${value?.completed ?? 0}/$total',
+                      color: colors.tertiary,
+                    );
+                  },
+                )
+              else
+                ProgressPill(
                   icon: Icons.auto_awesome_rounded,
-                  label: '${value?.completed ?? 0}/$total',
+                  label: 'с ИИ',
                   color: colors.tertiary,
-                );
-              },
-            )
-          else
-            ProgressPill(
-              icon: Icons.auto_awesome_rounded,
-              label: 'с ИИ',
-              color: colors.tertiary,
-            ),
-          const SizedBox(width: 5),
-          Icon(Icons.chevron_right_rounded, color: colors.onPrimaryContainer),
+                ),
+              const SizedBox(width: 5),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: colors.onPrimaryContainer,
+              ),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+class _ModelStatusCard extends StatefulWidget {
+  const _ModelStatusCard({
+    required this.store,
+    required this.downloader,
+    required this.onOpen,
+  });
+  final ModelStore? store;
+  final ModelDownloader? downloader;
+  final VoidCallback onOpen;
+
+  @override
+  State<_ModelStatusCard> createState() => _ModelStatusCardState();
+}
+
+class _ModelStatusCardState extends State<_ModelStatusCard> {
+  StreamSubscription<ModelDownloadState>? _subscription;
+  ModelDownloadState? _state;
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+    final current = widget.downloader?.currentState;
+    if (current != null) {
+      _state = current;
+      _ready = current.status == ModelDownloadStatus.ready;
+    }
+    _subscription = widget.downloader?.backgroundStates.listen((state) {
+      if (mounted) {
+        setState(() {
+          _state = state;
+          _ready = state.status == ModelDownloadStatus.ready;
+        });
+      }
+    });
+  }
+
+  Future<void> _check() async {
+    final ready = await widget.store?.verifiedModel(
+      Qwen3ModelManifest.manifest,
+    );
+    if (mounted) setState(() => _ready = ready != null);
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    if (_ready) return const SizedBox.shrink();
+    final downloading = _state?.status == ModelDownloadStatus.downloading;
+    return PressablePanel(
+      key: const ValueKey('home-model-status'),
+      onTap: widget.onOpen,
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+      decoration: BoxDecoration(
+        color: colors.tertiaryContainer.withValues(alpha: 0.58),
+        border: Border.all(color: colors.tertiary.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(
+                downloading
+                    ? Icons.downloading_rounded
+                    : Icons.smart_toy_rounded,
+                color: colors.tertiary,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  downloading
+                      ? 'Скачиваем локальный ИИ'
+                      : _state?.status == ModelDownloadStatus.paused
+                      ? 'Загрузка ИИ приостановлена'
+                      : _state?.status == ModelDownloadStatus.failed
+                      ? 'Загрузка ИИ не завершена'
+                      : 'ИИ на устройстве не установлен',
+                  style: Theme.of(context).textTheme.labelLarge
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded),
+            ],
+          ),
+          if (downloading) ...[
+            const SizedBox(height: 8),
+            LinearProgressIndicator(value: _state?.progress),
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '${((_state?.receivedBytes ?? 0) / 1000000).round()} / ${((_state?.totalBytes ?? 0) / 1000000).round()} МБ',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ),
+          ],
+          if (_state?.status == ModelDownloadStatus.failed &&
+              _state?.message != null) ...[
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _state!.message!,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -352,9 +501,7 @@ class _DayProgressStrip extends StatelessWidget {
         final overdue = snapshot.data?[1] ?? const [];
         final backlog = snapshot.data?.last ?? const [];
         final planned = today.length + backlog.length;
-        final progress = planned == 0
-            ? 0.0
-            : today.length / planned;
+        final progress = planned == 0 ? 0.0 : today.length / planned;
         return Row(
           key: const Key('home-day-progress'),
           children: [
@@ -388,7 +535,6 @@ class _DayProgressStrip extends StatelessWidget {
       },
     );
   }
-
 }
 
 class _DayCard extends StatefulWidget {

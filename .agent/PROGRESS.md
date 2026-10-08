@@ -207,3 +207,30 @@ G12 verification: 55 tests, analyzer, APK build/install passed.
 - RED: новые тесты подтверждали отсутствие Home capture и swipe shell.
 - GREEN: `flutter test --reporter compact` — 83 PASS; `flutter analyze` — чисто; `git diff --check` — PASS.
 - API35 образ не установлен: sdkmanager-процесс завершился/отсутствует, временный архив образа не появился. Проверка на эмуляторе впереди.
+
+### R3 — сроки, напоминания и Inbox AI
+
+- Статус: GREEN; включён в совместный R3/R4 commit из-за общего подключения AI и статуса модели в `app.dart`/Home.
+- У задач есть отдельное время дедлайна и напоминания; список дня упорядочивает ближайшие сроки, завершение отменяет уведомления.
+- Локальный AI предлагает категории Inbox с причинами. Применение только выбранных строк — одной транзакцией; отмена ничего не меняет, устаревшая задача откатывает пакет.
+- AI получает сроки задач для контекста рекомендаций. Дневник настроения сохраняется в локальном контексте по текущим настройкам.
+- Проверки: напоминания, парсер Inbox, selected-only, cancel и rollback покрыты тестами.
+
+### R4 — системная фоновая загрузка модели
+
+- Статус: GREEN; включён в совместный R3/R4 commit.
+- Подключён `background_downloader` 9.6.4 (Android WorkManager), уведомление с прогрессом, pause/resume, retry, task recovery и app-wide Home card.
+- WorkManager сохраняет скачанный `.part` в app-specific `models`; приложение переносит/проверяет точный размер и закреплённый SHA-256 до установки. Проверенный файл переиспользуется.
+- Добавлен тест совпадения системного файла `.part` с каталогом модели; защита от удаления файла при переносе.
+- Реальную загрузку 484 MB на эмуляторе не запускали; нативный плагин и экран проверены на запуске.
+
+### R5 — Android verification и выдача
+
+- Статус: PARTIAL; API35 debug проверен, финальный APK и публикация ожидают проверки артефактов.
+- Проверки 2026-10-08: `flutter analyze` — чисто; `flutter test --reporter compact` — 92 PASS; `git diff --check` — PASS.
+- Создан AVD Android 15/API35 x86_64. Debug APK собран, установлен, запущен; системная плашка модели видна; свайп с Home открыл Inbox. Flutter/AndroidRuntime аварий в logcat не обнаружено.
+- Настоящая Qwen модель не скачивалась; локальный вывод, расход ОЗУ и задержка не замерялись. Физический Redmi Note 13 не подключён.
+- Следующие шаги: свежая release arm64 сборка, инспекция APK/signature/permissions, копирование APK в Desktop, безопасный commit и push.
+- Final release: `app-release.apk` built for `android-arm64`, 39,533,625 bytes. Package `com.planerka.mobile`, min SDK 28, v2 signature verified; Android Debug certificate remains for manual install only. Permissions include INTERNET, POST_NOTIFICATIONS, FOREGROUND_SERVICE, exact alarms, wake lock, reboot and network state. APK includes arm64 llama.cpp libraries; no GGUF model.
+- Delivered locally to `C:\Users\d3c0r\Desktop\Планерка\Планерка-v3-arm64.apk`; SHA-256 `C11C80A803BEA350DD84BFB26C726EFAB38B1E2193E6635E106BEA5EB2E24057`.
+- Final `flutter analyze`: clean. Final `flutter test --reporter compact`: 92 PASS. API35 debug install/launch and Home-to-Inbox swipe verified after final code. Final release arm64 build and signature verification passed. Personal `private/` remains ignored and absent from staged paths.

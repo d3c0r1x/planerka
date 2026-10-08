@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:sqflite_common/sqlite_api.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/app_database.dart';
 import '../../planning/planning_repository.dart';
@@ -129,7 +130,8 @@ class AiRecommendationService {
     if (title.isEmpty || title.length > 240) {
       throw ArgumentError.value(goalTitle, 'goalTitle');
     }
-    final prompt = '''
+    final prompt =
+        '''
 Ты локальный планировщик. Разбей долгосрочную цель на конкретные небольшие действия.
 Цель: $title
 Верни только JSON: {"steps":["...", "..."]}. От 3 до 8 действий, каждое короткое, выполнимое и на русском.
@@ -141,6 +143,92 @@ class AiRecommendationService {
 
   Future<void> applyGoalSteps(String goalId, List<String> steps) =>
       PlanningRepository(database).addGoalActions(goalId, steps);
+
+  Future<AiInboxSuggestion> classifyInbox() async {
+    final rows = await database.database.query(
+      'tasks',
+      columns: ['id', 'title', 'notes'],
+      where: 'status = ?',
+      whereArgs: ['inbox'],
+      orderBy: 'created_at DESC',
+      limit: 20,
+    );
+    final tasks = rows
+        .map(
+          (row) => AiInboxTaskContext(
+            id: row['id'] as String,
+            title: row['title'] as String,
+            notes: row['notes'] as String? ?? '',
+          ),
+        )
+        .toList();
+    if (tasks.isEmpty) {
+      return AiInboxSuggestion(items: const [], titles: const {});
+    }
+    final answer = await generator.generate(
+      _contextBuilder.inboxPrompt(tasks),
+      maxTokens: 512,
+    );
+    return _contextBuilder.parseInbox(answer, tasks);
+  }
+
+  Future<void> applyInboxSelected(
+    AiInboxSuggestion suggestion,
+    Set<String> selectedIds,
+  ) async {
+    if (selectedIds.isEmpty) return;
+    final chosen = suggestion.items
+        .where((item) => selectedIds.contains(item.taskId))
+        .toList();
+    if (chosen.length != selectedIds.length) {
+      throw StateError('Рекомендации устарели');
+    }
+    final idGenerator = const Uuid();
+    await database.database.transaction((tx) async {
+      for (final item in chosen) {
+        final rows = await tx.query(
+          'tasks',
+          where: "id = ? AND status = 'inbox'",
+          whereArgs: [item.taskId],
+        );
+        if (rows.isEmpty) {
+          throw StateError('Запись уже обработана');
+        }
+        String? projectId;
+        if (item.disposition == 'project') {
+          projectId = idGenerator.v4();
+          await tx.insert('projects', {
+            'id': projectId,
+            'title': rows.single['title'],
+            'created_at': _now().toUtc().toIso8601String(),
+          });
+        }
+        if (item.disposition == 'deleted') {
+          await tx.update(
+            'tasks',
+            {
+              'status': 'deleted',
+              'updated_at': _now().toUtc().toIso8601String(),
+            },
+            where: 'id = ?',
+            whereArgs: [item.taskId],
+          );
+        } else {
+          await tx.update(
+            'tasks',
+            {
+              'status': item.disposition,
+              'project_id': projectId,
+              'updated_at': _now().toUtc().toIso8601String(),
+            },
+            where: 'id = ?',
+            whereArgs: [item.taskId],
+          );
+        }
+      }
+    });
+    await database.remindersChanged();
+  }
 
   Future<void> applySelected(
     AiSuggestion suggestion,
@@ -197,10 +285,14 @@ class GoalStepValidator {
     }
     final steps = <String>[];
     for (final item in raw) {
-      if (item is! String) throw const FormatException('Шаг должен быть текстом');
+      if (item is! String) {
+        throw const FormatException('Шаг должен быть текстом');
+      }
       final step = item.trim();
       if (step.isEmpty || step.length > 160 || steps.contains(step)) {
-        throw const FormatException('Шаг пустой, слишком длинный или повторяется');
+        throw const FormatException(
+          'Шаг пустой, слишком длинный или повторяется',
+        );
       }
       steps.add(step);
     }

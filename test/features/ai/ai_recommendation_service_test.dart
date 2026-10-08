@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:planerka/core/app_database.dart';
 import 'package:planerka/features/ai/model/local_ai_engine.dart';
 import 'package:planerka/features/ai/planning/ai_recommendation_service.dart';
+import 'package:planerka/features/inbox/inbox_repository.dart';
 import 'package:planerka/features/planning/planning_repository.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -99,6 +100,20 @@ void main() {
   test('rejects malformed goal steps', () {
     expect(() => GoalStepValidator().parse('{"steps":["один"]}'), throwsFormatException);
     expect(() => GoalStepValidator().parse('{"steps":["а","а","б"]}'), throwsFormatException);
+  });
+
+  test('Inbox AI preview does not write until selected apply', () async {
+    final entry = await InboxRepository(database).add('Купить корм');
+    generator.response = jsonEncode({
+      'items': [
+        {'taskId': entry.id, 'disposition': 'quick', 'reason': 'быстро'},
+      ],
+    });
+    final suggestion = await service.classifyInbox();
+    expect(suggestion.items, hasLength(1));
+    expect((await database.database.query('tasks', where: 'id = ?', whereArgs: [entry.id])).single['status'], 'inbox');
+    await service.applyInboxSelected(suggestion, {entry.id});
+    expect((await database.database.query('tasks', where: 'id = ?', whereArgs: [entry.id])).single['status'], 'quick');
   });
 
   test('generates a local preview without changing task rows', () async {

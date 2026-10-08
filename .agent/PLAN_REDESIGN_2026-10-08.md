@@ -63,3 +63,6 @@ Implement the user's latest requested redesign on top of the approved local-only
 - Last verified full regression: 81 tests pass; `flutter analyze` clean; release arm64 APK built. Re-run baseline before first implementation edits.
 - Current running emulator: API 25 x86_64; incompatible with current minSdk 28. Install/create an API 35 x86_64 emulator for app and inference testing; physical target phone is not connected.
 - Current Git state before this plan: clean, `develop` synchronized with `origin/develop` at `8068d16`.
+
+## Status update 2026-10-08
+- R1/R2 complete and published. R3/R4 implementation GREEN in working tree; regression 92 PASS and analyzer clean. R5 API35 smoke test passed for launch, Home model banner and swipe to Inbox; real model inference/download and final release artifact verification remain.

@@ -65,7 +65,7 @@ class InboxRepository {
       'tasks',
       where: 'status = ?',
       whereArgs: ['inbox'],
-      orderBy: 'created_at DESC',
+      orderBy: "CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, created_at DESC",
     );
     return rows.map(TaskEntry.fromMap).toList();
   }
@@ -105,4 +105,10 @@ class InboxRepository {
     });
     await database.remindersChanged();
   }
+
+  Future<void> classifyWithAi(
+    String id,
+    TaskDisposition disposition, {
+    DateTime? dueAt,
+  }) => triage(id, disposition, dueAt: dueAt);
 }
