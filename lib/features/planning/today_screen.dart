@@ -8,10 +8,12 @@ class TodayScreen extends StatefulWidget {
     super.key,
     required this.repository,
     this.interactive = true,
+    this.onReviewMissed,
   });
 
   final PlanningRepository repository;
   final bool interactive;
+  final Future<void> Function(String taskId)? onReviewMissed;
 
   @override
   State<TodayScreen> createState() => _TodayScreenState();
@@ -54,6 +56,13 @@ class _TodayScreenState extends State<TodayScreen> {
 
   Future<void> _complete(TaskEntry task) async {
     await widget.repository.complete(task.id);
+    if (mounted) _refresh();
+  }
+
+  Future<void> _reviewMissed(TaskEntry task) async {
+    final review = widget.onReviewMissed;
+    if (review == null) return;
+    await review(task.id);
     if (mounted) _refresh();
   }
 
@@ -160,7 +169,11 @@ class _TodayScreenState extends State<TodayScreen> {
     if (mounted) _refresh();
   }
 
-  Widget _taskTile(TaskEntry task, {bool backlog = false}) => Card(
+  Widget _taskTile(
+    TaskEntry task, {
+    bool backlog = false,
+    bool missed = false,
+  }) => Card(
     child: ListTile(
       title: Text(task.title),
       subtitle: task.dueAt == null && task.scheduledAt == null
@@ -176,6 +189,12 @@ class _TodayScreenState extends State<TodayScreen> {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (missed)
+            IconButton(
+              tooltip: 'Разобрать пропуск',
+              onPressed: widget.interactive ? () => _reviewMissed(task) : null,
+              icon: const Icon(Icons.psychology_alt_rounded),
+            ),
           if (backlog)
             IconButton(
               tooltip: 'На сегодня',
@@ -239,7 +258,7 @@ class _TodayScreenState extends State<TodayScreen> {
           children: [
             if (plan.overdue.isNotEmpty) ...[
               Text('Просрочено', style: Theme.of(context).textTheme.titleLarge),
-              ...plan.overdue.map(_taskTile),
+              ...plan.overdue.map((task) => _taskTile(task, missed: true)),
               const SizedBox(height: 16),
             ],
             Text('Сегодня', style: Theme.of(context).textTheme.titleLarge),

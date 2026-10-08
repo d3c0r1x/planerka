@@ -19,7 +19,8 @@ class AiProviderSettingsScreen extends StatefulWidget {
 }
 
 class _AiProviderSettingsScreenState extends State<AiProviderSettingsScreen> {
-  late final _store = widget.settingsStore ??
+  late final _store =
+      widget.settingsStore ??
       AiProviderSettingsStore(widget.database, SecureAiStore());
   late final _provider = TextEditingController();
   late final _endpoint = TextEditingController();
@@ -68,6 +69,7 @@ class _AiProviderSettingsScreenState extends State<AiProviderSettingsScreen> {
             'Если выбрать облачный режим и сохранить это разрешение, провайдер сможет получать сформированный для запроса контекст:\n\n'
             '• задачи: названия, заметки, метки и сроки;\n'
             '• цели: названия и прогресс;\n'
+            '• ответы на интервью о пропущенной задаче, если ты запустил этот разбор;\n'
             '• настроение и заметки дневника — только если включён отдельный переключатель ниже.\n\n'
             'Отправка заблокирована, пока ты не выберешь облачный режим, не сохранишь endpoint и ключ и не подтвердишь это разрешение.',
           ),

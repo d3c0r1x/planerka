@@ -23,6 +23,8 @@ import 'features/ai/ai_provider_router.dart';
 import 'features/ai/ai_provider_settings.dart';
 import 'features/ai/ai_provider_settings_screen.dart';
 import 'features/ai/secure_ai_store.dart';
+import 'features/ai/review/missed_task_review_service.dart';
+import 'features/ai/review/missed_task_review_screen.dart';
 
 import 'dart:io';
 
@@ -111,6 +113,7 @@ class PlanerkaApp extends StatefulWidget {
 }
 
 class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
+  final _navigatorKey = GlobalKey<NavigatorState>();
   int _tab = 0;
   int _inboxVersion = 0;
   late final PageController _pageController = PageController();
@@ -276,8 +279,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
   void _openModelScreen() {
     final database = widget.database;
     if (database == null) return;
-    Navigator.push<void>(
-      context,
+    _navigatorKey.currentState?.push<void>(
       MaterialPageRoute(
         builder: (_) => ModelScreen(
           database: database,
@@ -292,10 +294,29 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
   void _openAiSettings() {
     final database = widget.database;
     if (database == null) return;
-    Navigator.push<void>(
-      context,
+    _navigatorKey.currentState?.push<void>(
       MaterialPageRoute(
         builder: (_) => AiProviderSettingsScreen(database: database),
+      ),
+    );
+  }
+
+  Future<void> _openMissedTaskReview(String taskId) async {
+    final database = widget.database;
+    if (database == null) return;
+    final ai = _localAiService();
+    if (ai == null) {
+      _openModelScreen();
+      return;
+    }
+    await _navigatorKey.currentState?.push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => MissedTaskReviewScreen(
+          service: MissedTaskReviewService(database, ai.generator),
+          taskId: taskId,
+          onModelRequired: _openModelScreen,
+          onAiSettingsRequired: _openAiSettings,
+        ),
       ),
     );
   }
@@ -318,6 +339,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'Ритм дня',
       debugShowCheckedModeBanner: false,
       locale: const Locale('ru'),
@@ -500,7 +522,9 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                         modelStore: _modelStore,
                         enableBackgroundDownload: true,
                       ),
-                      _ => BackupScreen(service: BackupService(widget.database!)),
+                      _ => BackupScreen(
+                        service: BackupService(widget.database!),
+                      ),
                     },
                   ),
                 );
@@ -514,7 +538,10 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                 ),
                 const PopupMenuItem(value: 'habits', child: Text('Привычки')),
                 const PopupMenuItem(value: 'journal', child: Text('Дневник')),
-                const PopupMenuItem(value: 'model', child: Text('Локальный ИИ')),
+                const PopupMenuItem(
+                  value: 'model',
+                  child: Text('Локальный ИИ'),
+                ),
                 const PopupMenuItem(
                   value: 'backup',
                   child: Text('Настройки и резервная копия'),
@@ -573,6 +600,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                     ),
                   ),
                 ),
+                onReviewMissed: _openMissedTaskReview,
               ),
               InboxScreen(
                 key: ValueKey(_inboxVersion),

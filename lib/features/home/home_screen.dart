@@ -28,6 +28,7 @@ class HomeScreen extends StatefulWidget {
     required this.onModel,
     this.isActive = true,
     required this.onChooseGoal,
+    this.onReviewMissed,
   });
 
   final PlanningRepository planning;
@@ -42,6 +43,7 @@ class HomeScreen extends StatefulWidget {
   final VoidCallback onModel;
   final bool isActive;
   final VoidCallback onChooseGoal;
+  final Future<void> Function(String taskId)? onReviewMissed;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -168,6 +170,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: TodayScreen(
             key: ValueKey('today-screen-${widget.isActive}'),
             repository: widget.planning,
+            onReviewMissed: widget.onReviewMissed,
           ),
         ),
       ],
