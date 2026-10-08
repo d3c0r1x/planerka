@@ -393,11 +393,19 @@ class PlanningRepository {
   }
 
   Future<({int completed, int active})> goalTaskCounts(String goalId) async {
+    final progress = await goalTaskProgress(goalId);
+    return (
+      completed: progress.completed,
+      active: progress.total - progress.completed,
+    );
+  }
+
+  Future<({int completed, int total})> goalTaskProgress(String goalId) async {
     final rows = await database.database.rawQuery(
       '''
       SELECT
         COUNT(DISTINCT CASE WHEN t.status = 'completed' THEN t.id END) AS completed,
-        COUNT(DISTINCT CASE WHEN t.status IN ('planned', 'quick') THEN t.id END) AS active
+        COUNT(DISTINCT CASE WHEN t.status IN ('completed', 'planned', 'quick') THEN t.id END) AS total
       FROM tasks t
       WHERE (t.project_id IN (SELECT id FROM projects WHERE goal_id = ? AND archived_at IS NULL)
           AND t.status != 'project')
@@ -408,7 +416,7 @@ class PlanningRepository {
     final row = rows.single;
     return (
       completed: (row['completed'] as num?)?.toInt() ?? 0,
-      active: (row['active'] as num?)?.toInt() ?? 0,
+      total: (row['total'] as num?)?.toInt() ?? 0,
     );
   }
 

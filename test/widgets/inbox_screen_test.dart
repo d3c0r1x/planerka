@@ -27,15 +27,15 @@ void main() {
 
   testWidgets('add and triage an Inbox entry from the app', (tester) async {
     await tester.pumpWidget(PlanerkaApp(database: database));
-    await tester.tap(find.byTooltip('Добавить'));
+    await tester.tap(find.byKey(const Key('center-action-button')));
     await tester.pumpAndSettle();
-    final dialogInput = find.descendant(
-      of: find.byType(AlertDialog),
-      matching: find.byType(TextField),
+    await tester.enterText(
+      find.byKey(const Key('quick-capture-input')),
+      'Купить корм',
     );
-    expect(dialogInput, findsOneWidget);
-    await tester.enterText(dialogInput, 'Купить корм');
-    await tester.tap(find.text('Сохранить'));
+    await tester.tap(find.byKey(const Key('quick-capture-save')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('nav-inbox')));
     await tester.pumpAndSettle();
 
     expect(find.text('Купить корм'), findsOneWidget);
@@ -51,13 +51,13 @@ void main() {
 
   testWidgets('blank Inbox entry is not saved', (tester) async {
     await tester.pumpWidget(PlanerkaApp(database: database));
-    await tester.tap(find.byTooltip('Добавить'));
+    await tester.tap(find.byKey(const Key('center-action-button')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Сохранить'));
+    await tester.tap(find.byKey(const Key('quick-capture-save')));
     await tester.pumpAndSettle();
 
     expect(await database.database.query('tasks'), isEmpty);
-    expect(find.text('Введите задачу'), findsOneWidget);
+    expect(find.byKey(const Key('quick-capture-input')), findsOneWidget);
   });
 
   testWidgets('app keeps the Inbox AI control accessible', (tester) async {

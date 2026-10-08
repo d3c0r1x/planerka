@@ -349,13 +349,12 @@ class _GoalsScreenState extends State<GoalsScreen> {
               for (final primary in snapshot.data!.where(
                 (goal) => _primaryGoalIds.contains(goal.id),
               ))
-                FutureBuilder<({int completed, int active})>(
+                FutureBuilder<({int completed, int total})>(
                   key: ValueKey('goal-progress-${primary.id}'),
-                  future: widget.repository.goalTaskCounts(primary.id),
+                  future: widget.repository.goalTaskProgress(primary.id),
                   builder: (context, counts) {
                     final value = counts.data;
-                    final total =
-                        (value?.completed ?? 0) + (value?.active ?? 0);
+                    final total = value?.total ?? 0;
                     final progress = total == 0
                         ? 0.0
                         : (value!.completed / total);
@@ -377,6 +376,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                             ),
                             const SizedBox(height: 12),
                             LinearProgressIndicator(
+                              key: const Key('goal-task-progress'),
                               value: progress,
                               minHeight: 8,
                             ),
@@ -384,6 +384,10 @@ class _GoalsScreenState extends State<GoalsScreen> {
                             Text(
                               '${value?.completed ?? 0} из $total шагов выполнено',
                             ),
+                            if (total == 0) ...[
+                              const SizedBox(height: 4),
+                              const Text('Добавьте шаг, чтобы видеть прогресс'),
+                            ],
                           ],
                         ),
                       ),
@@ -402,12 +406,11 @@ class _GoalsScreenState extends State<GoalsScreen> {
                               ? 'Главная · шаги: ${_progressLabel(goal)}'
                               : _progressLabel(goal),
                         ),
-                        trailing: FutureBuilder<({int completed, int active})>(
-                          future: widget.repository.goalTaskCounts(goal.id),
+                        trailing: FutureBuilder<({int completed, int total})>(
+                          future: widget.repository.goalTaskProgress(goal.id),
                           builder: (context, counts) {
                             final value = counts.data;
-                            final total =
-                                (value?.completed ?? 0) + (value?.active ?? 0);
+                            final total = value?.total ?? 0;
                             final taskProgress = total == 0
                                 ? 0.0
                                 : value!.completed / total;

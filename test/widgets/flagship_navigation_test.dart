@@ -51,6 +51,30 @@ void main() {
     );
   });
 
+  testWidgets('center action opens quick capture and saves to Inbox', (
+    tester,
+  ) async {
+    await tester.pumpWidget(PlanerkaApp(database: database));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('center-action-button')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('center-action-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('quick-capture-input')), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('quick-capture-input')),
+      'Добавить шаг к цели',
+    );
+    await tester.tap(find.byKey(const Key('quick-capture-save')));
+    await tester.pumpAndSettle();
+
+    final rows = await database.database.query('tasks');
+    expect(rows, hasLength(1));
+    expect(rows.single['title'], 'Добавить шаг к цели');
+    expect(rows.single['status'], 'inbox');
+  });
+
   testWidgets('horizontal swipe changes page and selected navigation', (
     tester,
   ) async {

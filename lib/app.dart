@@ -242,51 +242,17 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
 
   String? _modelDirectoryPath;
 
-  Future<void> _add(BuildContext dialogContext) async {
-    final database = widget.database;
-    if (database == null) return;
-    var draft = '';
-    var showError = false;
-    final text = await showDialog<String>(
-      context: dialogContext,
-      builder: (context) => StatefulBuilder(
-        builder: (context, updateDialog) => AlertDialog(
-          title: const Text('Новая запись'),
-          content: TextField(
-            onChanged: (value) => draft = value,
-            autofocus: true,
-            minLines: 1,
-            maxLines: 4,
-            decoration: InputDecoration(
-              hintText: 'Что сейчас в голове?',
-              errorText: showError ? 'Введите задачу' : null,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Отмена'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (draft.trim().isEmpty) {
-                  updateDialog(() => showError = true);
-                  return;
-                }
-                Navigator.pop(context, draft);
-              },
-              child: const Text('Сохранить'),
-            ),
-          ],
-        ),
+  Future<void> _showQuickCapture(BuildContext context) async {
+    final text = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
+      builder: (_) => const _QuickCaptureSheet(),
     );
-    if (text == null) return;
-    await InboxRepository(database).add(text);
-    if (mounted) {
-      setState(() => _inboxVersion++);
-      _selectTab(1);
-    }
+    if (text != null && text.trim().isNotEmpty) await _quickCapture(text);
   }
 
   @override
@@ -558,81 +524,164 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
         systemNavigationBarDividerColor: Colors.black,
         systemNavigationBarContrastEnforced: false,
       ),
-      child: NavigationBar(
+      child: SizedBox(
         height: 82,
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        indicatorColor: Colors.transparent,
-        backgroundColor: Colors.black,
-        selectedIndex: _tab,
-        onDestinationSelected: _selectTab,
-        destinations: [
-          NavigationDestination(
-            key: const ValueKey('nav-today'),
-            icon: const _NavGlyph(
-              icon: Icons.wb_sunny_rounded,
-              color: Color(0xFFFFC857),
-              selected: false,
+        child: Stack(
+          alignment: Alignment.topCenter,
+          children: [
+            Positioned.fill(
+              child: NavigationBar(
+                height: 82,
+                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                indicatorColor: Colors.transparent,
+                backgroundColor: Colors.black,
+                selectedIndex: _tab,
+                onDestinationSelected: _selectTab,
+                destinations: [
+                  NavigationDestination(
+                    key: const ValueKey('nav-today'),
+                    icon: const _NavGlyph(
+                      icon: Icons.wb_sunny_rounded,
+                      color: Color(0xFFFFC857),
+                      selected: false,
+                    ),
+                    selectedIcon: const _NavGlyph(
+                      icon: Icons.wb_sunny_rounded,
+                      color: Color(0xFFFFC857),
+                      selected: true,
+                    ),
+                    label: 'Сегодня',
+                  ),
+                  NavigationDestination(
+                    key: const ValueKey('nav-inbox'),
+                    icon: const _NavGlyph(
+                      icon: Icons.inbox_rounded,
+                      color: Color(0xFF62C9FF),
+                      selected: false,
+                    ),
+                    selectedIcon: const _NavGlyph(
+                      icon: Icons.inbox_rounded,
+                      color: Color(0xFF62C9FF),
+                      selected: true,
+                    ),
+                    label: 'Inbox',
+                  ),
+                  NavigationDestination(
+                    key: const ValueKey('nav-focus'),
+                    icon: const _NavGlyph(
+                      icon: Icons.bolt_rounded,
+                      color: Color(0xFFFF8C69),
+                      selected: false,
+                    ),
+                    selectedIcon: const _NavGlyph(
+                      icon: Icons.bolt_rounded,
+                      color: Color(0xFFFF8C69),
+                      selected: true,
+                    ),
+                    label: 'Фокус',
+                  ),
+                  NavigationDestination(
+                    key: const ValueKey('nav-progress'),
+                    icon: const _NavGlyph(
+                      icon: Icons.auto_graph_rounded,
+                      color: Color(0xFFA991FF),
+                      selected: false,
+                    ),
+                    selectedIcon: const _NavGlyph(
+                      icon: Icons.auto_graph_rounded,
+                      color: Color(0xFFA991FF),
+                      selected: true,
+                    ),
+                    label: 'Прогресс',
+                  ),
+                ],
+              ),
             ),
-            selectedIcon: const _NavGlyph(
-              icon: Icons.wb_sunny_rounded,
-              color: Color(0xFFFFC857),
-              selected: true,
+            Positioned(
+              top: 2,
+              child: Builder(
+                builder: (context) => FloatingActionButton(
+                  key: const Key('center-action-button'),
+                  heroTag: 'center-quick-capture',
+                  tooltip: 'Добавить задачу',
+                  onPressed: () => _showQuickCapture(context),
+                  backgroundColor: const Color(0xFFFFC857),
+                  foregroundColor: const Color(0xFF241700),
+                  elevation: 7,
+                  shape: const CircleBorder(),
+                  child: const Icon(Icons.add_rounded, size: 30),
+                ),
+              ),
             ),
-            label: 'Сегодня',
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _QuickCaptureSheet extends StatefulWidget {
+  const _QuickCaptureSheet();
+
+  @override
+  State<_QuickCaptureSheet> createState() => _QuickCaptureSheetState();
+}
+
+class _QuickCaptureSheetState extends State<_QuickCaptureSheet> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final text = _controller.text.trim();
+    if (text.isNotEmpty) Navigator.pop(context, text);
+  }
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        MediaQuery.viewInsetsOf(context).bottom + 20,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Быстрая запись',
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(fontWeight: FontWeight.w800),
           ),
-          NavigationDestination(
-            key: const ValueKey('nav-inbox'),
-            icon: const _NavGlyph(
-              icon: Icons.inbox_rounded,
-              color: Color(0xFF62C9FF),
-              selected: false,
+          const SizedBox(height: 12),
+          TextField(
+            key: const Key('quick-capture-input'),
+            controller: _controller,
+            autofocus: true,
+            minLines: 1,
+            maxLines: 4,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _save(),
+            decoration: const InputDecoration(
+              hintText: 'Запиши мысль или задачу',
+              prefixIcon: Icon(Icons.edit_note_rounded),
             ),
-            selectedIcon: const _NavGlyph(
-              icon: Icons.inbox_rounded,
-              color: Color(0xFF62C9FF),
-              selected: true,
-            ),
-            label: 'Inbox',
           ),
-          NavigationDestination(
-            key: const ValueKey('nav-focus'),
-            icon: const _NavGlyph(
-              icon: Icons.bolt_rounded,
-              color: Color(0xFFFF8C69),
-              selected: false,
-            ),
-            selectedIcon: const _NavGlyph(
-              icon: Icons.bolt_rounded,
-              color: Color(0xFFFF8C69),
-              selected: true,
-            ),
-            label: 'Фокус',
-          ),
-          NavigationDestination(
-            key: const ValueKey('nav-progress'),
-            icon: const _NavGlyph(
-              icon: Icons.auto_graph_rounded,
-              color: Color(0xFFA991FF),
-              selected: false,
-            ),
-            selectedIcon: const _NavGlyph(
-              icon: Icons.auto_graph_rounded,
-              color: Color(0xFFA991FF),
-              selected: true,
-            ),
-            label: 'Прогресс',
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            key: const Key('quick-capture-save'),
+            onPressed: _save,
+            icon: const Icon(Icons.inbox_rounded),
+            label: const Text('Сохранить в Inbox'),
           ),
         ],
       ),
     ),
-    floatingActionButton: _tab >= 2
-        ? null
-        : Builder(
-            builder: (context) => FloatingActionButton(
-              onPressed: () => _add(context),
-              tooltip: 'Добавить',
-              child: const Icon(Icons.add_rounded),
-            ),
-          ),
   );
 }

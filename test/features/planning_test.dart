@@ -60,8 +60,10 @@ void main() {
     await inbox.triage(quick.id, TaskDisposition.quick);
     await inbox.triage(planned.id, TaskDisposition.planned);
 
-    expect((await planning.listForDay(DateTime.utc(2026, 10, 8))).single.id,
-        quick.id);
+    expect(
+      (await planning.listForDay(DateTime.utc(2026, 10, 8))).single.id,
+      quick.id,
+    );
     expect((await planning.listUnscheduled()).single.id, planned.id);
     await planning.setToday(planned.id, DateTime.utc(2026, 10, 9));
     expect(
@@ -108,6 +110,30 @@ void main() {
 
     await planning.setTaskGoalLinks(task.id, {goalB.id}, source: 'ai');
     expect(await planning.listTaskGoalLinks(task.id), {goalB.id});
+  });
+
+  test(
+    'goal task progress counts linked and project tasks only once',
+    () async {
+      final projectSource = await inbox.add('Подготовить запуск');
+      await inbox.triage(projectSource.id, TaskDisposition.project);
+      final project = (await planning.listProjects()).single;
+      final goal = await planning.addGoal('Запустить продукт');
+      await planning.linkProjectToGoal(project.id, goal.id);
+      final step = await planning.addAction(project.id, 'Собрать релиз');
+      await planning.setTaskGoalLinks(step.id, {goal.id});
+      await planning.complete(step.id);
+
+      expect(await planning.goalTaskProgress(goal.id), (
+        completed: 1,
+        total: 1,
+      ));
+    },
+  );
+
+  test('goal task progress is zero when no linked steps exist', () async {
+    final goal = await planning.addGoal('Новая цель');
+    expect(await planning.goalTaskProgress(goal.id), (completed: 0, total: 0));
   });
 
   test('large project task contains selectable child tasks', () async {

@@ -103,7 +103,10 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 7),
               _DayProgressStrip(planning: widget.planning),
               const SizedBox(height: 10),
-              _PrimaryGoalCard(onTap: widget.onChooseGoal),
+              _PrimaryGoalCard(
+                planning: widget.planning,
+                onTap: widget.onChooseGoal,
+              ),
               const SizedBox(height: 9),
               _ModelStatusCard(
                 store: widget.modelStore,
@@ -173,15 +176,15 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _PrimaryGoalCard extends StatelessWidget {
-  const _PrimaryGoalCard({required this.onTap});
+  const _PrimaryGoalCard({required this.planning, required this.onTap});
+  final PlanningRepository planning;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return FutureBuilder<List<Goal>>(
-      future: (context.findAncestorWidgetOfExactType<HomeScreen>())!.planning
-          .primaryGoals(),
+      future: planning.primaryGoals(),
       builder: (context, snapshot) {
         final goals = snapshot.data ?? const <Goal>[];
         final goal = goals.isEmpty ? null : goals.first;
@@ -235,20 +238,12 @@ class _PrimaryGoalCard extends StatelessWidget {
                       ),
                     ),
                     if (goal != null)
-                      FutureBuilder<({int completed, int active})>(
-                        future:
-                            (context
-                                    .findAncestorWidgetOfExactType<
-                                      HomeScreen
-                                    >())!
-                                .planning
-                                .goalTaskCounts(goal.id),
+                      FutureBuilder<({int completed, int total})>(
+                        future: planning.goalTaskProgress(goal.id),
                         builder: (context, counts) {
                           final value = counts.data;
-                          final total =
-                              (value?.completed ?? 0) + (value?.active ?? 0);
                           return Text(
-                            '${value?.completed ?? 0} из $total шагов выполнено',
+                            '${value?.completed ?? 0} из ${value?.total ?? 0} шагов выполнено',
                             style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(
                                   color: colors.onPrimaryContainer.withValues(
@@ -257,6 +252,32 @@ class _PrimaryGoalCard extends StatelessWidget {
                                 ),
                           );
                         },
+                      ),
+                    if (goal != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 7),
+                        child: FutureBuilder<({int completed, int total})>(
+                          future: planning.goalTaskProgress(goal.id),
+                          builder: (context, counts) {
+                            final value = counts.data;
+                            final progress = value == null || value.total == 0
+                                ? 0.0
+                                : value.completed / value.total;
+                            return ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: LinearProgressIndicator(
+                                key: const Key('home-primary-goal-progress'),
+                                value: progress,
+                                minHeight: 6,
+                                backgroundColor: colors.onPrimaryContainer
+                                    .withValues(alpha: .16),
+                                valueColor: AlwaysStoppedAnimation(
+                                  colors.tertiary,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     if (goals.length > 1)
                       Text(
@@ -271,14 +292,11 @@ class _PrimaryGoalCard extends StatelessWidget {
                 ),
               ),
               if (goal != null)
-                FutureBuilder<({int completed, int active})>(
-                  future: (context.findAncestorWidgetOfExactType<HomeScreen>())!
-                      .planning
-                      .goalTaskCounts(goal.id),
+                FutureBuilder<({int completed, int total})>(
+                  future: planning.goalTaskProgress(goal.id),
                   builder: (context, counts) {
                     final value = counts.data;
-                    final total =
-                        (value?.completed ?? 0) + (value?.active ?? 0);
+                    final total = value?.total ?? 0;
                     return ProgressPill(
                       icon: Icons.auto_awesome_rounded,
                       label: '${value?.completed ?? 0}/$total',
