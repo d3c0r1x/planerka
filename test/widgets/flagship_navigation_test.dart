@@ -25,6 +25,60 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  testWidgets('default theme keeps the day canvas black', (tester) async {
+    await tester.pumpWidget(const PlanerkaApp());
+    await tester.pumpAndSettle();
+
+    final scaffold = tester.element(find.byType(Scaffold).last);
+    expect(Theme.of(scaffold).brightness, Brightness.dark);
+    expect(Theme.of(scaffold).scaffoldBackgroundColor, Colors.black);
+  });
+
+  testWidgets('capture explains its destination on a narrow accessible dock', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(640, 1600);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(const PlanerkaApp());
+    await tester.pumpAndSettle();
+
+    final capture = find.byKey(const Key('center-action-button'));
+    expect(tester.getSemantics(capture).label, 'Записать задачу в Inbox');
+    expect(tester.getSize(capture).shortestSide, greaterThanOrEqualTo(48));
+    for (final icon in [Icons.inbox_rounded, Icons.bolt_rounded]) {
+      expect(
+        tester
+            .getRect(find.byIcon(icon).first)
+            .overlaps(tester.getRect(capture)),
+        isFalse,
+        reason:
+            'Capture ${tester.getRect(capture)} must leave navigation ${tester.getRect(find.byIcon(icon).first)} visible and tappable',
+      );
+    }
+    await tester.tap(find.byIcon(Icons.inbox_rounded).first);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      1,
+    );
+    await tester.tap(find.byIcon(Icons.bolt_rounded).first);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      2,
+    );
+    await tester.tap(capture);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('quick-capture-input')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    semantics.dispose();
+  });
+
   testWidgets('home quick capture saves directly to Inbox', (tester) async {
     await tester.pumpWidget(PlanerkaApp(database: database));
     await tester.pump(const Duration(milliseconds: 240));

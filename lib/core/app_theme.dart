@@ -52,6 +52,7 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: scheme.surface,
+      splashFactory: InkSparkle.splashFactory,
       textTheme: typography.copyWith(
         displaySmall: typography.displaySmall?.copyWith(
           fontSize: 38,
@@ -78,6 +79,10 @@ class AppTheme {
           fontWeight: FontWeight.w700,
         ),
         bodyLarge: typography.bodyLarge?.copyWith(fontSize: 16, height: 1.4),
+        labelLarge: typography.labelLarge?.copyWith(
+          fontWeight: FontWeight.w700,
+          letterSpacing: .1,
+        ),
       ),
       cardTheme: CardThemeData(
         color: scheme.surfaceContainerLow,
@@ -85,8 +90,8 @@ class AppTheme {
         margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(22),
-          side: BorderSide(color: scheme.outlineVariant.withValues(alpha: .4)),
+          borderRadius: BorderRadius.circular(28),
+          side: BorderSide(color: scheme.outlineVariant.withValues(alpha: .25)),
         ),
       ),
       appBarTheme: AppBarTheme(
@@ -95,6 +100,7 @@ class AppTheme {
         centerTitle: false,
         elevation: 0,
         scrolledUnderElevation: 0,
+        titleSpacing: 18,
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
@@ -106,10 +112,45 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
+        fillColor: scheme.surfaceContainerHigh.withValues(alpha: .7),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 18,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
         ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: scheme.primary, width: 1.4),
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => TextStyle(
+            fontSize: 11,
+            fontWeight: states.contains(WidgetState.selected)
+                ? FontWeight.w800
+                : FontWeight.w500,
+            color: states.contains(WidgetState.selected)
+                ? scheme.onSurface
+                : scheme.onSurfaceVariant,
+            letterSpacing: .1,
+          ),
+        ),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: scheme.surfaceContainerHighest,
+        contentTextStyle: TextStyle(color: scheme.onSurface),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: scheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
       ),
     );
   }

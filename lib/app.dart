@@ -61,9 +61,13 @@ class _ActionGlyph extends StatelessWidget {
     width: 38,
     height: 38,
     decoration: BoxDecoration(
-      color: color.withValues(alpha: .14),
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: color.withValues(alpha: .2)),
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [color.withValues(alpha: .24), color.withValues(alpha: .07)],
+      ),
+      borderRadius: BorderRadius.circular(13),
+      border: Border.all(color: color.withValues(alpha: .22)),
     ),
     child: Icon(icon, color: color, size: 21),
   );
@@ -74,27 +78,44 @@ class _NavGlyph extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.selected,
+    this.horizontalOffset = 0,
   });
 
   final IconData icon;
   final Color color;
   final bool selected;
+  final double horizontalOffset;
 
   @override
-  Widget build(BuildContext context) => AnimatedContainer(
-    duration: const Duration(milliseconds: 220),
-    curve: Curves.easeOutBack,
-    width: selected ? 56 : 42,
-    height: 38,
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: selected ? .2 : .08),
-      borderRadius: BorderRadius.circular(15),
-      border: Border.all(
-        color: color.withValues(alpha: selected ? .5 : .12),
-        width: selected ? 1.2 : .7,
+  Widget build(BuildContext context) => Transform.translate(
+    offset: Offset(horizontalOffset, 0),
+    child: AnimatedContainer(
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+      width: 42,
+      height: 34,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            color.withValues(alpha: selected ? .3 : .06),
+            color.withValues(alpha: selected ? .12 : .02),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: color.withValues(alpha: selected ? .58 : .12),
+          width: selected ? 1 : .7,
+        ),
+        boxShadow: selected
+            ? [BoxShadow(color: color.withValues(alpha: .12), blurRadius: 14)]
+            : null,
       ),
+      child: Icon(icon, color: color, size: selected ? 23 : 21),
     ),
-    child: Icon(icon, color: color, size: selected ? 23 : 21),
   );
 }
 
@@ -290,6 +311,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
   }
 
   void _selectTab(int index) {
+    if (index != _tab) unawaited(HapticFeedback.selectionClick());
     setState(() => _tab = index);
     if (_pageController.hasClients && _pageController.page?.round() != index) {
       unawaited(
@@ -474,12 +496,21 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
 
   Widget _mainScaffoldBody(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: Text(switch (_tab) {
-        0 => 'Ритм дня',
-        1 => 'Inbox',
-        2 => 'Фокус',
-        _ => 'Прогресс',
-      }),
+      title: Text(
+        switch (_tab) {
+          0 => 'Ритм дня',
+          1 => 'Inbox',
+          2 => 'Фокус',
+          _ => 'Прогресс',
+        },
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          fontSize: 21,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -.7,
+        ),
+      ),
       actions: [
         PopupMenuButton<String>(
           tooltip: 'Цветовая тема',
@@ -699,114 +730,158 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
         systemNavigationBarDividerColor: Colors.black,
         systemNavigationBarContrastEnforced: false,
       ),
-      child: SizedBox(
-        height: 86,
-        child: Stack(
-          alignment: Alignment.topCenter,
-          children: [
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: const Color(0xF20D1018),
-                  border: Border(
-                    top: BorderSide(
-                      color: Theme.of(context).colorScheme.outlineVariant
-                          .withValues(alpha: .52),
+      child: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+        child: SizedBox(
+          height: 78,
+          child: Stack(
+            alignment: Alignment.topCenter,
+            children: [
+              Positioned.fill(
+                top: 8,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(30),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF101115),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(color: const Color(0xFF2B2C35)),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x66000000),
+                          blurRadius: 26,
+                          offset: Offset(0, -8),
+                        ),
+                      ],
+                    ),
+                    child: NavigationBar(
+                      height: 70,
+                      labelBehavior:
+                          NavigationDestinationLabelBehavior.alwaysShow,
+                      indicatorColor: Colors.transparent,
+                      backgroundColor: Colors.transparent,
+                      selectedIndex: _tab,
+                      onDestinationSelected: _selectTab,
+                      destinations: [
+                        NavigationDestination(
+                          key: const ValueKey('nav-today'),
+                          icon: const _NavGlyph(
+                            icon: Icons.wb_sunny_rounded,
+                            color: Color(0xFFFFC857),
+                            selected: false,
+                          ),
+                          selectedIcon: const _NavGlyph(
+                            icon: Icons.wb_sunny_rounded,
+                            color: Color(0xFFFFC857),
+                            selected: true,
+                          ),
+                          label: 'Сегодня',
+                        ),
+                        NavigationDestination(
+                          key: const ValueKey('nav-inbox'),
+                          icon: const _NavGlyph(
+                            icon: Icons.inbox_rounded,
+                            horizontalOffset: -18,
+                            color: Color(0xFF62C9FF),
+                            selected: false,
+                          ),
+                          selectedIcon: const _NavGlyph(
+                            icon: Icons.inbox_rounded,
+                            horizontalOffset: -18,
+                            color: Color(0xFF62C9FF),
+                            selected: true,
+                          ),
+                          label: 'Inbox',
+                        ),
+                        NavigationDestination(
+                          key: const ValueKey('nav-focus'),
+                          icon: const _NavGlyph(
+                            icon: Icons.bolt_rounded,
+                            horizontalOffset: 18,
+                            color: Color(0xFFFF8C69),
+                            selected: false,
+                          ),
+                          selectedIcon: const _NavGlyph(
+                            icon: Icons.bolt_rounded,
+                            horizontalOffset: 18,
+                            color: Color(0xFFFF8C69),
+                            selected: true,
+                          ),
+                          label: 'Фокус',
+                        ),
+                        NavigationDestination(
+                          key: const ValueKey('nav-progress'),
+                          icon: const _NavGlyph(
+                            icon: Icons.auto_graph_rounded,
+                            color: Color(0xFFA991FF),
+                            selected: false,
+                          ),
+                          selectedIcon: const _NavGlyph(
+                            icon: Icons.auto_graph_rounded,
+                            color: Color(0xFFA991FF),
+                            selected: true,
+                          ),
+                          label: 'Прогресс',
+                        ),
+                      ],
                     ),
                   ),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x66000000),
-                      blurRadius: 26,
-                      offset: Offset(0, -8),
-                    ),
-                  ],
-                ),
-                child: NavigationBar(
-                  height: 82,
-                  labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-                  indicatorColor: Colors.transparent,
-                  backgroundColor: Colors.transparent,
-                  selectedIndex: _tab,
-                  onDestinationSelected: _selectTab,
-                  destinations: [
-                    NavigationDestination(
-                      key: const ValueKey('nav-today'),
-                      icon: const _NavGlyph(
-                        icon: Icons.wb_sunny_rounded,
-                        color: Color(0xFFFFC857),
-                        selected: false,
-                      ),
-                      selectedIcon: const _NavGlyph(
-                        icon: Icons.wb_sunny_rounded,
-                        color: Color(0xFFFFC857),
-                        selected: true,
-                      ),
-                      label: 'Сегодня',
-                    ),
-                    NavigationDestination(
-                      key: const ValueKey('nav-inbox'),
-                      icon: const _NavGlyph(
-                        icon: Icons.inbox_rounded,
-                        color: Color(0xFF62C9FF),
-                        selected: false,
-                      ),
-                      selectedIcon: const _NavGlyph(
-                        icon: Icons.inbox_rounded,
-                        color: Color(0xFF62C9FF),
-                        selected: true,
-                      ),
-                      label: 'Inbox',
-                    ),
-                    NavigationDestination(
-                      key: const ValueKey('nav-focus'),
-                      icon: const _NavGlyph(
-                        icon: Icons.bolt_rounded,
-                        color: Color(0xFFFF8C69),
-                        selected: false,
-                      ),
-                      selectedIcon: const _NavGlyph(
-                        icon: Icons.bolt_rounded,
-                        color: Color(0xFFFF8C69),
-                        selected: true,
-                      ),
-                      label: 'Фокус',
-                    ),
-                    NavigationDestination(
-                      key: const ValueKey('nav-progress'),
-                      icon: const _NavGlyph(
-                        icon: Icons.auto_graph_rounded,
-                        color: Color(0xFFA991FF),
-                        selected: false,
-                      ),
-                      selectedIcon: const _NavGlyph(
-                        icon: Icons.auto_graph_rounded,
-                        color: Color(0xFFA991FF),
-                        selected: true,
-                      ),
-                      label: 'Прогресс',
-                    ),
-                  ],
                 ),
               ),
-            ),
-            Positioned(
-              top: 2,
-              child: Builder(
-                builder: (context) => FloatingActionButton(
-                  key: const Key('center-action-button'),
-                  heroTag: 'center-quick-capture',
-                  tooltip: 'Добавить задачу',
-                  onPressed: () => _showQuickCapture(context),
-                  backgroundColor: const Color(0xFFFFC857),
-                  foregroundColor: const Color(0xFF241700),
-                  elevation: 7,
-                  shape: const CircleBorder(),
-                  child: const Icon(Icons.add_rounded, size: 30),
+              Positioned(
+                top: 0,
+                child: Builder(
+                  builder: (context) => Semantics(
+                    key: const Key('center-action-button'),
+                    label: 'Записать задачу в Inbox',
+                    button: true,
+                    onTap: () => _showQuickCapture(context),
+                    excludeSemantics: true,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Color(0xFFFFE398),
+                            Color(0xFFFFBE48),
+                            Color(0xFFFF9863),
+                          ],
+                        ),
+                        border: Border.all(color: Colors.black, width: 4),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x35FFC857),
+                            blurRadius: 20,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: FloatingActionButton(
+                          heroTag: 'center-quick-capture',
+                          tooltip: 'Добавить задачу',
+                          onPressed: () {
+                            unawaited(HapticFeedback.lightImpact());
+                            unawaited(_showQuickCapture(context));
+                          },
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: const Color(0xFF241700),
+                          elevation: 0,
+                          highlightElevation: 0,
+                          shape: const CircleBorder(),
+                          child: const Icon(Icons.add_rounded, size: 30),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     ),
