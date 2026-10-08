@@ -62,6 +62,8 @@ class ModelDownloader {
   final ModelTransport transport;
   final ModelStore store;
   bool _paused = false;
+  bool _backgroundInitialized = false;
+  Future<void>? _backgroundInitialization;
 
   final StreamController<ModelDownloadState> _backgroundStates =
       StreamController<ModelDownloadState>.broadcast();
@@ -71,6 +73,20 @@ class ModelDownloader {
   bool _finishingNativeTransfer = false;
 
   Future<void> initializeBackground() async {
+    if (_backgroundInitialized) return;
+    final pending = _backgroundInitialization;
+    if (pending != null) return pending;
+    final initialization = _initializeBackground();
+    _backgroundInitialization = initialization;
+    try {
+      await initialization;
+      _backgroundInitialized = true;
+    } finally {
+      _backgroundInitialization = null;
+    }
+  }
+
+  Future<void> _initializeBackground() async {
     await bg.FileDownloader().start(autoCleanDatabase: true);
     bg.FileDownloader().configureNotification(
       running: const bg.TaskNotification(
@@ -95,17 +111,34 @@ class ModelDownloader {
     final restored = await bg.FileDownloader().transfers.rehydrateFromDatabase(
       group: 'planerka-model',
     );
-    for (final transfer in restored) {
-      if (transfer.task.taskId ==
-          'planerka-model-${Qwen3ModelManifest.manifest.sha256.substring(0, 12)}') {
-        _nativeTransfer = transfer;
-        _emitNative(transfer);
-        _watchNativeTransfer(transfer, Qwen3ModelManifest.manifest);
-        if (transfer.status == bg.TaskStatus.complete) {
-          await _finishNativeTransfer(transfer, Qwen3ModelManifest.manifest);
-        }
-        break;
+    final idPrefix =
+        'planerka-model-${Qwen3ModelManifest.manifest.sha256.substring(0, 12)}';
+    final matching =
+        restored
+            .where((transfer) => transfer.task.taskId.startsWith(idPrefix))
+            .toList()
+          ..sort(
+            (left, right) =>
+                right.task.creationTime.compareTo(left.task.creationTime),
+          );
+    if (matching.isNotEmpty) {
+      final transfer = matching.first;
+      _nativeTransfer = transfer;
+      _emitNative(transfer);
+      _watchNativeTransfer(transfer, Qwen3ModelManifest.manifest);
+      if (transfer.status == bg.TaskStatus.complete) {
+        await _finishNativeTransfer(transfer, Qwen3ModelManifest.manifest);
       }
+    }
+    final manifest = Qwen3ModelManifest.manifest;
+    final installed = await store.verifiedModel(manifest);
+    if (installed != null) {
+      _lastState = ModelDownloadState(
+        ModelDownloadStatus.ready,
+        receivedBytes: manifest.expectedBytes,
+        totalBytes: manifest.expectedBytes,
+      );
+      _emit(_lastState!);
     }
   }
 
@@ -127,8 +160,17 @@ class ModelDownloader {
       return _lastState!;
     }
     await initializeBackground();
+    final idPrefix = 'planerka-model-${manifest.sha256.substring(0, 12)}';
+    var taskId = _nativeTransfer?.task.taskId ?? idPrefix;
+    final previous = _nativeTransfer;
+    if (previous?.status == bg.TaskStatus.complete) {
+      final oldFilePath = await previous!.task.filePath();
+      if (!await File(oldFilePath).exists()) {
+        taskId = '$idPrefix-${DateTime.now().microsecondsSinceEpoch}';
+      }
+    }
     final task = bg.DownloadTask(
-      taskId: 'planerka-model-${manifest.sha256.substring(0, 12)}',
+      taskId: taskId,
       url: manifest.url,
       filename: '${manifest.fileName}.part',
       directory: 'models',
@@ -212,7 +254,8 @@ class ModelDownloader {
     try {
       final file = await transfer.file;
       await store.files.installDownloaded(file.path, manifest.fileName);
-      if (await store.verifiedModel(manifest) == null) {
+      final installed = await store.installPartial(manifest);
+      if (!installed || await store.verifiedModel(manifest) == null) {
         await store.remove(manifest);
         _lastState = const ModelDownloadState(
           ModelDownloadStatus.failed,
