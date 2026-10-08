@@ -87,6 +87,17 @@ class ModelDownloader {
   }
 
   Future<void> _initializeBackground() async {
+    final manifest = Qwen3ModelManifest.manifest;
+    if (await store.verifiedModel(manifest) != null) {
+      _lastState = ModelDownloadState(
+        ModelDownloadStatus.ready,
+        receivedBytes: manifest.expectedBytes,
+        totalBytes: manifest.expectedBytes,
+      );
+      _emit(_lastState!);
+      return;
+    }
+
     await bg.FileDownloader().start(autoCleanDatabase: true);
     bg.FileDownloader().configureNotification(
       running: const bg.TaskNotification(
@@ -129,16 +140,6 @@ class ModelDownloader {
       if (transfer.status == bg.TaskStatus.complete) {
         await _finishNativeTransfer(transfer, Qwen3ModelManifest.manifest);
       }
-    }
-    final manifest = Qwen3ModelManifest.manifest;
-    final installed = await store.verifiedModel(manifest);
-    if (installed != null) {
-      _lastState = ModelDownloadState(
-        ModelDownloadStatus.ready,
-        receivedBytes: manifest.expectedBytes,
-        totalBytes: manifest.expectedBytes,
-      );
-      _emit(_lastState!);
     }
   }
 
@@ -201,7 +202,15 @@ class ModelDownloader {
         progressBar: true,
       ),
     );
-    final transfer = await bg.FileDownloader().transfers.getOrStart(task);
+    final fileDownloader = bg.FileDownloader();
+    // getOrStart intentionally returns completed transfers. A previous model
+    // download may have been consumed by installation, so a retry must use a
+    // fresh ID and not be bound to the old completed task record.
+    if (taskId != _nativeTransfer?.task.taskId &&
+        previous?.status == bg.TaskStatus.complete) {
+      await fileDownloader.database.deleteRecordWithId(previous!.task.taskId);
+    }
+    final transfer = await fileDownloader.transfers.getOrStart(task);
     _nativeTransfer = transfer;
     _emitNative(transfer);
     _watchNativeTransfer(transfer, manifest);
@@ -250,13 +259,17 @@ class ModelDownloader {
     ModelManifest manifest,
   ) async {
     if (_finishingNativeTransfer) return;
+    if (transfer.status != bg.TaskStatus.complete) return;
     _finishingNativeTransfer = true;
     try {
-      final file = await transfer.file;
-      await store.files.installDownloaded(file.path, manifest.fileName);
-      final installed = await store.installPartial(manifest);
-      if (!installed || await store.verifiedModel(manifest) == null) {
-        await store.remove(manifest);
+      final installed = await store.installCompletedDownload(
+        manifest,
+        () async {
+          final file = await transfer.file;
+          return file.path;
+        },
+      );
+      if (!installed) {
         _lastState = const ModelDownloadState(
           ModelDownloadStatus.failed,
           message: 'Размер или SHA-256 модели не совпал',

@@ -40,6 +40,31 @@ void main() {
   );
 
   test(
+    'completed transfer does not replace an already verified model',
+    () async {
+      final files = MemoryModelFileStore()
+        ..seedInstalled(utf8.encode('tiny model'));
+      final store = ModelStore(files);
+      var requestedTransferFile = false;
+
+      final installed = await store.installCompletedDownload(
+        Qwen3ModelManifest.testFixture,
+        () async {
+          requestedTransferFile = true;
+          throw StateError('completed transfer file was already consumed');
+        },
+      );
+
+      expect(installed, isTrue);
+      expect(requestedTransferFile, isFalse);
+      expect(
+        await store.verifiedModel(Qwen3ModelManifest.testFixture),
+        isNotNull,
+      );
+    },
+  );
+
+  test(
     'partial and native files cannot install before exact size and SHA',
     () async {
       final store = MemoryModelFileStore()..seedPartial(utf8.encode('bad'));

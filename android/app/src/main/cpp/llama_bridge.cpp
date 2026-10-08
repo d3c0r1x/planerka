@@ -27,7 +27,7 @@ std::string apply_template(const llama_model * model, const std::string & prompt
     const char * tmpl = llama_model_chat_template(model, nullptr);
     if (tmpl == nullptr) return prompt;
     const llama_chat_message messages[] = {
-        {"system", "Ты локальный помощник приложения Планёрка. Отвечай кратко и по-русски."},
+        {"system", "Ты локальный помощник приложения Планёрка. Отвечай кратко и по-русски. Не показывай ход рассуждений. Выводи только готовый ответ."},
         {"user", prompt.c_str()},
     };
     const int32_t required = llama_chat_apply_template(tmpl, messages, 2, true, nullptr, 0);
@@ -70,7 +70,7 @@ Java_com_planerka_mobile_LocalAiNative_generate(
         return env->NewStringUTF(error.c_str());
     }
 
-    const std::string formatted = apply_template(model, input);
+    const std::string formatted = apply_template(model, input + "\n/no_think");
     const llama_vocab * vocab = llama_model_get_vocab(model);
     const int32_t needed = -llama_tokenize(vocab, formatted.c_str(),
         static_cast<int32_t>(formatted.size()), nullptr, 0, true, true);

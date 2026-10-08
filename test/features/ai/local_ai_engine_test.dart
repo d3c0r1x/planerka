@@ -53,6 +53,48 @@ void main() {
     },
   );
 
+  test('hides Qwen thinking block and returns only final answer', () async {
+    final channel = MethodChannel('planerka/local_ai_think_test');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'loadModel') return true;
+      return '<think>private reasoning</think>Полезный ответ';
+    });
+    final files = MemoryModelFileStore()..seedInstalled('tiny model'.codeUnits);
+    final engine = LocalAiEngine(
+      store: ModelStore(files),
+      manifest: Qwen3ModelManifest.testFixture,
+      channel: channel,
+    );
+
+    expect(await engine.generate('Подскажи шаг'), 'Полезный ответ');
+    messenger.setMockMethodCallHandler(channel, null);
+  });
+
+  test(
+    'rejects truncated Qwen thinking instead of showing it to user',
+    () async {
+      final channel = MethodChannel('planerka/local_ai_truncated_think_test');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'loadModel') return true;
+        return '<think>private reasoning without a final answer';
+      });
+      final files = MemoryModelFileStore()
+        ..seedInstalled('tiny model'.codeUnits);
+      final engine = LocalAiEngine(
+        store: ModelStore(files),
+        manifest: Qwen3ModelManifest.testFixture,
+        channel: channel,
+      );
+
+      await expectLater(engine.generate('Подскажи шаг'), throwsStateError);
+      messenger.setMockMethodCallHandler(channel, null);
+    },
+  );
+
   test('cancels native generation when response exceeds timeout', () async {
     final channel = MethodChannel('planerka/local_ai_timeout_test');
     var cancelCalls = 0;

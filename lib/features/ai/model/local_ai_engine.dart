@@ -59,13 +59,43 @@ class LocalAiEngine implements AiTextGenerator {
       await cancel();
       rethrow;
     }
-    if (response == null || response.trim().isEmpty) {
-      throw StateError('Local model returned no text');
+    final userFacingResponse = _removeQwenThinking(response ?? '');
+    if (userFacingResponse.isEmpty) {
+      throw StateError('Local model returned no user-facing answer');
     }
-    return response.trim();
+    return userFacingResponse;
   }
 
   Future<void> cancel() => channel.invokeMethod<void>('cancel');
 
   Future<void> unload() => channel.invokeMethod<void>('unload');
+}
+
+String _removeQwenThinking(String response) {
+  const startTag = '<think>';
+  const endTag = '</think>';
+  final visible = StringBuffer();
+  var offset = 0;
+  var insideThinking = false;
+
+  while (offset < response.length) {
+    if (insideThinking) {
+      final end = response.indexOf(endTag, offset);
+      if (end < 0) break;
+      offset = end + endTag.length;
+      insideThinking = false;
+      continue;
+    }
+
+    final start = response.indexOf(startTag, offset);
+    if (start < 0) {
+      visible.write(response.substring(offset));
+      break;
+    }
+    visible.write(response.substring(offset, start));
+    offset = start + startTag.length;
+    insideThinking = true;
+  }
+
+  return visible.toString().trim();
 }

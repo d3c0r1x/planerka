@@ -48,6 +48,21 @@ class ModelStore {
     return true;
   }
 
+  Future<bool> installCompletedDownload(
+    ModelManifest manifest,
+    Future<String> Function() sourcePath,
+  ) async {
+    if (await verifiedModel(manifest) != null) return true;
+
+    await files.installDownloaded(await sourcePath(), manifest.fileName);
+    final installed = await installPartial(manifest);
+    if (!installed || await verifiedModel(manifest) == null) {
+      await remove(manifest);
+      return false;
+    }
+    return true;
+  }
+
   Future<void> remove(ModelManifest manifest) =>
       files.delete(manifest.fileName);
 

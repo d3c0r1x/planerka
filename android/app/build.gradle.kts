@@ -1,3 +1,21 @@
+import java.util.Properties
+
+val releaseSigningPropertiesFile = rootProject.file("key.properties")
+val releaseSigningProperties = Properties().apply {
+    if (releaseSigningPropertiesFile.exists()) {
+        releaseSigningPropertiesFile.inputStream().use(::load)
+    }
+}
+
+gradle.taskGraph.whenReady {
+    val releaseTasks = allTasks.any { it.name.contains("Release", ignoreCase = true) }
+    if (releaseTasks && !releaseSigningPropertiesFile.exists()) {
+        throw GradleException(
+            "Release signing key is not configured. Create android/key.properties from the private release keystore."
+        )
+    }
+}
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -8,6 +26,15 @@ android {
     namespace = "com.planerka.mobile"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
+
+    signingConfigs {
+        create("releaseLocal") {
+            storeFile = file(releaseSigningProperties.getProperty("storeFile", "missing-release-key"))
+            storePassword = releaseSigningProperties.getProperty("storePassword")
+            keyAlias = releaseSigningProperties.getProperty("keyAlias")
+            keyPassword = releaseSigningProperties.getProperty("keyPassword")
+        }
+    }
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
@@ -37,9 +64,7 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("releaseLocal")
         }
     }
 
