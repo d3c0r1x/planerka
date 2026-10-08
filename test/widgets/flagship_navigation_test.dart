@@ -100,4 +100,26 @@ void main() {
     );
     expect(find.text('Inbox пуст. Добавьте любую мысль.'), findsOneWidget);
   });
+
+  testWidgets('sleep mode is available in the home quick menu', (tester) async {
+    tester.view.physicalSize = const Size(800, 1800);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(PlanerkaApp(database: database));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Ещё'));
+    await tester.pumpAndSettle();
+    expect(find.text('Режим сна'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('sleep-mode-menu-item')));
+    await tester.pumpAndSettle();
+
+    final rows = await database.database.query(
+      'app_metadata',
+      where: 'key = ?',
+      whereArgs: ['sleep_mode_enabled'],
+    );
+    expect(rows.single['value'], 'true');
+  });
 }

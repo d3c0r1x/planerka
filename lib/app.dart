@@ -32,6 +32,7 @@ import 'features/planning/projects_screen.dart';
 import 'features/shifts/shift_repository.dart';
 import 'features/reminders/local_notification_port.dart';
 import 'features/reminders/reminder_service.dart';
+import 'features/reminders/sleep_mode_service.dart';
 import 'features/review/progress_screen.dart';
 import 'features/review/review_service.dart';
 import 'features/timers/focus_screen.dart';
@@ -110,10 +111,12 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
   int _inboxVersion = 0;
   late final PageController _pageController = PageController();
   ReminderService? _reminders;
+  SleepModeService? _sleepMode;
   ModelStore? _modelStore;
   ModelDownloader? _sharedModelDownloader;
   ThemeMode _themeMode = ThemeMode.dark;
   String? _backgroundPath;
+  bool _sleepEnabled = false;
 
   @override
   void initState() {
@@ -127,7 +130,10 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
       _reminders = ReminderService(
         database,
         widget.notificationPort ?? LocalNotificationPort(),
+        shifts: ShiftRepository(database),
+        sleepMode: _sleepMode = SleepModeService(database),
       );
+      unawaited(_loadSleepMode());
       database.onRemindersChanged = _syncReminders;
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => unawaited(_syncReminders()),
@@ -179,6 +185,18 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
     } catch (_) {
       // Task and timer operations remain available if Android blocks reminders.
     }
+  }
+
+  Future<void> _loadSleepMode() async {
+    final enabled = await _sleepMode?.isEnabled() ?? false;
+    if (mounted) setState(() => _sleepEnabled = enabled);
+  }
+
+  Future<void> _toggleSleepMode() async {
+    final next = !_sleepEnabled;
+    await _sleepMode?.setEnabled(next);
+    if (mounted) setState(() => _sleepEnabled = next);
+    await _syncReminders();
   }
 
   @override
@@ -417,31 +435,43 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                 icon: Icons.auto_awesome_rounded,
                 color: Color(0xFFA991FF),
               ),
-              onSelected: (value) => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) => switch (value) {
-                    'habits' => HabitsScreen(
-                      repository: WellbeingRepository(widget.database!),
-                    ),
-                    'journal' => JournalScreen(
-                      repository: WellbeingRepository(widget.database!),
-                    ),
-                    'model' => ModelScreen(
-                      database: widget.database,
-                      downloader: _sharedModelDownloader,
-                      modelStore: _modelStore,
-                      enableBackgroundDownload: true,
-                    ),
-                    _ => BackupScreen(service: BackupService(widget.database!)),
-                  },
+              onSelected: (value) {
+                if (value == 'sleep') {
+                  unawaited(_toggleSleepMode());
+                  return;
+                }
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => switch (value) {
+                      'habits' => HabitsScreen(
+                        repository: WellbeingRepository(widget.database!),
+                      ),
+                      'journal' => JournalScreen(
+                        repository: WellbeingRepository(widget.database!),
+                      ),
+                      'model' => ModelScreen(
+                        database: widget.database,
+                        downloader: _sharedModelDownloader,
+                        modelStore: _modelStore,
+                        enableBackgroundDownload: true,
+                      ),
+                      _ => BackupScreen(service: BackupService(widget.database!)),
+                    },
+                  ),
+                );
+              },
+              itemBuilder: (context) => [
+                CheckedPopupMenuItem(
+                  key: const Key('sleep-mode-menu-item'),
+                  value: 'sleep',
+                  checked: _sleepEnabled,
+                  child: const Text('Режим сна'),
                 ),
-              ),
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: 'habits', child: Text('Привычки')),
-                PopupMenuItem(value: 'journal', child: Text('Дневник')),
-                PopupMenuItem(value: 'model', child: Text('Локальный ИИ')),
-                PopupMenuItem(
+                const PopupMenuItem(value: 'habits', child: Text('Привычки')),
+                const PopupMenuItem(value: 'journal', child: Text('Дневник')),
+                const PopupMenuItem(value: 'model', child: Text('Локальный ИИ')),
+                const PopupMenuItem(
                   value: 'backup',
                   child: Text('Настройки и резервная копия'),
                 ),

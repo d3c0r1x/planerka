@@ -13,6 +13,14 @@ class LocalNotificationPort implements NotificationPort {
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
   bool _initialized = false;
+  Future<void> Function(String actionId, String payload)? _responseHandler;
+
+  @override
+  void setResponseHandler(
+    Future<void> Function(String actionId, String payload) handler,
+  ) {
+    _responseHandler = handler;
+  }
 
   Future<void> _initialize() async {
     if (_initialized) return;
@@ -20,6 +28,14 @@ class LocalNotificationPort implements NotificationPort {
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       ),
+      onDidReceiveNotificationResponse: (response) {
+        final payload = response.payload;
+        final actionId = response.actionId;
+        if (payload != null && actionId != null && actionId.isNotEmpty) {
+          final handler = _responseHandler;
+          if (handler != null) handler(actionId, payload);
+        }
+      },
     );
     _initialized = true;
   }
@@ -35,20 +51,36 @@ class LocalNotificationPort implements NotificationPort {
   }
 
   @override
-  Future<void> schedule(int id, String title, DateTime at) async {
+  Future<void> schedule(
+    int id,
+    String title,
+    DateTime at, {
+    String? payload,
+    List<NotificationAction> actions = const [],
+  }) async {
     await _initialize();
     Future<void> submit(AndroidScheduleMode mode) => _plugin.zonedSchedule(
       id: id,
       title: title,
       body: 'Откройте Планерку',
+      payload: payload,
       scheduledDate: tz.TZDateTime.from(at.toUtc(), tz.UTC),
-      notificationDetails: const NotificationDetails(
+      notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           'planerka_reminders',
           'Напоминания',
           channelDescription: 'Задачи и таймеры',
           importance: Importance.high,
           priority: Priority.high,
+          actions: actions
+              .map(
+                (action) => AndroidNotificationAction(
+                  action.id,
+                  action.label,
+                  showsUserInterface: true,
+                ),
+              )
+              .toList(),
         ),
       ),
       androidScheduleMode: mode,

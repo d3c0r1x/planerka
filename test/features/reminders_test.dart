@@ -6,21 +6,38 @@ import 'package:planerka/core/app_database.dart';
 import 'package:planerka/features/inbox/inbox_repository.dart';
 import 'package:planerka/features/planning/planning_repository.dart';
 import 'package:planerka/features/reminders/reminder_service.dart';
+import 'package:planerka/features/reminders/sleep_mode_service.dart';
+import 'package:planerka/features/shifts/shift_models.dart';
+import 'package:planerka/features/shifts/shift_repository.dart';
 import 'package:planerka/features/timers/timer_engine.dart';
 import 'package:planerka/features/timers/timer_repository.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 class FakeNotifications implements NotificationPort {
   final scheduled = <int, DateTime>{};
+  final scheduledActions = <int, List<NotificationAction>>{};
   bool permission = true;
+  Future<void> Function(String actionId, String payload)? responseHandler;
 
   @override
   Future<bool> requestPermission() async => permission;
 
   @override
-  Future<void> schedule(int id, String title, DateTime at) async {
+  Future<void> schedule(
+    int id,
+    String title,
+    DateTime at, {
+    String? payload,
+    List<NotificationAction> actions = const [],
+  }) async {
     scheduled[id] = at;
+    scheduledActions[id] = actions;
   }
+
+  @override
+  void setResponseHandler(
+    Future<void> Function(String actionId, String payload) handler,
+  ) => responseHandler = handler;
 
   @override
   Future<void> cancel(int id) async => scheduled.remove(id);
@@ -84,9 +101,15 @@ void main() {
       await repo.triage(task.id, TaskDisposition.quick);
 
       await reminders.rescheduleAll();
+      expect(
+        notifications.scheduledActions.values.first.map((action) => action.id),
+        ['complete', 'postpone'],
+      );
       expect(notifications.scheduled.values.toSet(), {
         DateTime.utc(2026, 10, 8, 14),
         DateTime.utc(2026, 10, 8, 16),
+        DateTime.utc(2026, 10, 8, 18),
+        DateTime.utc(2026, 10, 8, 20),
       });
 
       final afternoon = DateTime.utc(2026, 10, 8, 15);
@@ -98,6 +121,8 @@ void main() {
       await later.rescheduleAll();
       expect(notifications.scheduled.values.toSet(), {
         DateTime.utc(2026, 10, 8, 16),
+        DateTime.utc(2026, 10, 8, 18),
+        DateTime.utc(2026, 10, 8, 20),
       });
 
       await PlanningRepository(database).complete(task.id);
@@ -105,6 +130,100 @@ void main() {
       expect(notifications.scheduled, isEmpty);
     },
   );
+
+  test('sleep cancels reminders and wake starts a fresh two hour interval', () async {
+    final task = await InboxRepository(database, now: () => now).add('Короткое дело');
+    await InboxRepository(database, now: () => now).triage(
+      task.id,
+      TaskDisposition.quick,
+    );
+    final sleep = SleepModeService(database, now: () => now);
+    await reminders.rescheduleAll();
+    expect(notifications.scheduled, isNotEmpty);
+
+    await sleep.setEnabled(true);
+    reminders = ReminderService(
+      database,
+      notifications,
+      now: () => now,
+      sleepMode: sleep,
+    );
+    await reminders.rescheduleAll();
+    expect(notifications.scheduled, isEmpty);
+
+    final wakeTime = now.add(const Duration(hours: 6));
+    await sleep.setEnabled(false, at: wakeTime);
+    reminders = ReminderService(
+      database,
+      notifications,
+      now: () => wakeTime,
+      sleepMode: sleep,
+    );
+    await reminders.rescheduleAll();
+    expect(notifications.scheduled.values.first, wakeTime.add(const Duration(hours: 2)));
+  });
+
+  test('attended shift reminder is scheduled before commute starts', () async {
+    final shiftRepository = ShiftRepository(database, now: () => now);
+    await shiftRepository.saveSchedule(
+      ShiftSettings(anchorDate: DateTime(2026, 10, 9)),
+      [
+        for (var index = 0; index < 4; index++)
+          ShiftTeam(
+            id: 'team-$index',
+            name: 'Смена ${index + 1}',
+            leaderName: 'Руководитель ${index + 1}',
+            colorValue: 0xFF55D8C7,
+            phaseOffsetDays: index * 2,
+            attends: index == 0,
+          ),
+      ],
+    );
+    reminders = ReminderService(
+      database,
+      notifications,
+      now: () => now,
+      shifts: shiftRepository,
+    );
+    await reminders.rescheduleAll();
+
+    expect(
+      notifications.scheduled.values,
+      contains(DateTime(2026, 10, 9, 6, 30).toUtc()),
+    );
+    expect(notifications.scheduled.values, hasLength(4));
+
+    await shiftRepository.setAttendance(
+      'team-0',
+      DateTime(2026, 10, 9),
+      ShiftAttendance.attended,
+    );
+    await reminders.rescheduleAll();
+    expect(notifications.scheduled.values, hasLength(3));
+    expect(
+      notifications.scheduled.values,
+      isNot(contains(DateTime(2026, 10, 9, 6, 30).toUtc())),
+    );
+  });
+
+  test('notification actions complete or postpone only an active task', () async {
+    final task = await InboxRepository(database, now: () => now).add('Короткое дело');
+    await InboxRepository(database, now: () => now).triage(
+      task.id,
+      TaskDisposition.quick,
+    );
+    await reminders.rescheduleAll();
+    expect(notifications.responseHandler, isNotNull);
+
+    await notifications.responseHandler!('postpone', task.id);
+    expect(notifications.scheduled.values.first, now.add(const Duration(hours: 2)));
+
+    await notifications.responseHandler!('complete', task.id);
+    expect((await database.database.query('tasks')).single['status'], 'completed');
+    await notifications.responseHandler!('complete', task.id);
+    await notifications.responseHandler!('unknown', task.id);
+    expect((await database.database.query('tasks')).single['status'], 'completed');
+  });
 
   test('unfinished quick task rolls into today after midnight', () async {
     final repo = InboxRepository(database, now: () => now);
