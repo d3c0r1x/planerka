@@ -41,6 +41,7 @@ class ShiftDayStatus {
     this.workEnd,
     this.blockStart,
     this.blockEnd,
+    this.cancelled = false,
   });
 
   final DateTime date;
@@ -50,6 +51,7 @@ class ShiftDayStatus {
   final DateTime? workEnd;
   final DateTime? blockStart;
   final DateTime? blockEnd;
+  final bool cancelled;
 }
 
 class ShiftOverride {

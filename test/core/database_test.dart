@@ -61,6 +61,11 @@ void main() {
         'journal_entries',
         'timer_sessions',
         'task_goal_links',
+        'shift_teams',
+        'shift_settings',
+        'shift_overrides',
+        'shift_adjustments',
+        'shift_attendance',
       ]),
     );
     await db.close();
@@ -118,4 +123,60 @@ void main() {
       );
     },
   );
+
+  test('v6 to v7 migration preserves planner, diary and XP rows', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'planerka_v6_shift_upgrade_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final path = p.join(directory.path, 'legacy-v6.db');
+    final legacy = await databaseFactoryFfi.openDatabase(
+      path,
+      options: OpenDatabaseOptions(
+        version: 6,
+        onCreate: (db, _) async {
+          await db.execute(
+            'CREATE TABLE tasks (id TEXT PRIMARY KEY, title TEXT NOT NULL)',
+          );
+          await db.execute(
+            'CREATE TABLE goals (id TEXT PRIMARY KEY, title TEXT NOT NULL)',
+          );
+          await db.execute(
+            'CREATE TABLE journal_entries (id TEXT PRIMARY KEY, text TEXT NOT NULL)',
+          );
+          await db.execute(
+            'CREATE TABLE xp_events (event_id TEXT PRIMARY KEY, points INTEGER NOT NULL)',
+          );
+        },
+      ),
+    );
+    await legacy.insert('tasks', {'id': 'task-v6', 'title': 'Старая задача'});
+    await legacy.insert('goals', {'id': 'goal-v6', 'title': 'Старая цель'});
+    await legacy.insert('journal_entries', {
+      'id': 'mood-v6',
+      'text': 'Старая запись',
+    });
+    await legacy.insert('xp_events', {'event_id': 'xp-v6', 'points': 10});
+    await legacy.close();
+
+    final upgraded = await AppDatabase.open(path, factory: databaseFactoryFfi);
+    addTearDown(upgraded.close);
+
+    expect((await upgraded.database.query('tasks')).single['id'], 'task-v6');
+    expect((await upgraded.database.query('goals')).single['id'], 'goal-v6');
+    expect(
+      (await upgraded.database.query('journal_entries')).single['id'],
+      'mood-v6',
+    );
+    expect(
+      (await upgraded.database.query('xp_events')).single['event_id'],
+      'xp-v6',
+    );
+    expect(await upgraded.database.query('shift_teams'), isEmpty);
+    expect(
+      (await upgraded.database.rawQuery('PRAGMA user_version'))
+          .single['user_version'],
+      7,
+    );
+  });
 }

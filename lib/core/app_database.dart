@@ -17,7 +17,7 @@ class AppDatabase {
     final database = await source.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 6,
+        version: 7,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: (db, version) async {
           await db.execute('''
@@ -121,6 +121,7 @@ class AppDatabase {
           await db.execute(
             'CREATE INDEX tasks_parent_idx ON tasks(parent_task_id)',
           );
+          await _createShiftTables(db);
         },
         onUpgrade: (db, oldVersion, newVersion) async {
           if (oldVersion < 2) {
@@ -162,6 +163,7 @@ class AppDatabase {
               );
             }
           }
+          if (oldVersion < 7) await _createShiftTables(db);
         },
       ),
     );
@@ -224,5 +226,61 @@ class AppDatabase {
         redeemed_at TEXT
       )
     ''');
+  }
+
+  static Future<void> _createShiftTables(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE shift_teams (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        leader_name TEXT NOT NULL,
+        color_value INTEGER NOT NULL,
+        phase_offset_days INTEGER NOT NULL CHECK(phase_offset_days IN (0, 2, 4, 6)),
+        attends INTEGER NOT NULL DEFAULT 1 CHECK(attends IN (0, 1))
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE shift_settings (
+        id INTEGER PRIMARY KEY CHECK(id = 1),
+        anchor_date TEXT NOT NULL,
+        commute_before_minutes INTEGER NOT NULL DEFAULT 60 CHECK(commute_before_minutes >= 0),
+        commute_after_minutes INTEGER NOT NULL DEFAULT 90 CHECK(commute_after_minutes >= 0),
+        reminder_lead_minutes INTEGER NOT NULL DEFAULT 30 CHECK(reminder_lead_minutes >= 0),
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE shift_overrides (
+        team_id TEXT NOT NULL REFERENCES shift_teams(id) ON DELETE CASCADE,
+        date TEXT NOT NULL,
+        phase TEXT NOT NULL CHECK(phase IN ('day', 'preNightRest', 'night', 'recovery', 'rest')),
+        work_start TEXT,
+        work_end TEXT,
+        cancelled INTEGER NOT NULL DEFAULT 0 CHECK(cancelled IN (0, 1)),
+        PRIMARY KEY(team_id, date)
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE shift_adjustments (
+        team_id TEXT NOT NULL REFERENCES shift_teams(id) ON DELETE CASCADE,
+        effective_date TEXT NOT NULL,
+        delta_days INTEGER NOT NULL,
+        PRIMARY KEY(team_id, effective_date)
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE shift_attendance (
+        team_id TEXT NOT NULL REFERENCES shift_teams(id) ON DELETE CASCADE,
+        date TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('attended', 'missed')),
+        PRIMARY KEY(team_id, date)
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX shift_overrides_date_idx ON shift_overrides(date)',
+    );
+    await db.execute(
+      'CREATE INDEX shift_adjustments_date_idx ON shift_adjustments(effective_date)',
+    );
   }
 }

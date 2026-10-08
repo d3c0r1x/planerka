@@ -42,7 +42,7 @@ void main() {
     expect(names, contains('game_achievements'));
     expect(names, contains('custom_rewards'));
     expect(await database.database.rawQuery('PRAGMA user_version'), [
-      {'user_version': 6},
+      {'user_version': 7},
     ]);
   });
 
@@ -65,7 +65,18 @@ void main() {
     }
     await database.database.execute('DROP TABLE task_goal_links');
     await database.database.execute('DROP INDEX tasks_parent_idx');
-    await database.database.execute('ALTER TABLE tasks DROP COLUMN parent_task_id');
+    await database.database.execute(
+      'ALTER TABLE tasks DROP COLUMN parent_task_id',
+    );
+    for (final table in [
+      'shift_overrides',
+      'shift_adjustments',
+      'shift_attendance',
+      'shift_settings',
+      'shift_teams',
+    ]) {
+      await database.database.execute('DROP TABLE $table');
+    }
     await database.database.execute('PRAGMA user_version = 3');
     await database.close();
 
