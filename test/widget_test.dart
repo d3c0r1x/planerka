@@ -6,7 +6,7 @@ void main() {
   testWidgets('app opens to a clear empty day', (tester) async {
     await tester.pumpWidget(const PlanerkaApp());
 
-    expect(find.text('Планерка'), findsOneWidget);
+    expect(find.text('Ритм дня'), findsOneWidget);
     expect(find.byKey(const Key('nav-today')), findsOneWidget);
     expect(find.text('Ваш день начинается здесь'), findsOneWidget);
     expect(find.byIcon(Icons.add_rounded), findsOneWidget);
@@ -16,7 +16,7 @@ void main() {
     await tester.pumpWidget(const PlanerkaApp());
     await tester.pump();
 
-    await tester.tap(find.byTooltip('Тема'));
+    await tester.tap(find.byTooltip('Цветовая тема'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump();

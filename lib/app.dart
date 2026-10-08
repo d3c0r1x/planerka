@@ -39,6 +39,54 @@ import 'features/wellbeing/habits_screen.dart';
 import 'features/wellbeing/journal_screen.dart';
 import 'features/wellbeing/wellbeing_repository.dart';
 
+class _ActionGlyph extends StatelessWidget {
+  const _ActionGlyph({required this.icon, required this.color});
+
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 38,
+    height: 38,
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: .14),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: color.withValues(alpha: .2)),
+    ),
+    child: Icon(icon, color: color, size: 21),
+  );
+}
+
+class _NavGlyph extends StatelessWidget {
+  const _NavGlyph({
+    required this.icon,
+    required this.color,
+    required this.selected,
+  });
+
+  final IconData icon;
+  final Color color;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) => AnimatedContainer(
+    duration: const Duration(milliseconds: 220),
+    curve: Curves.easeOutBack,
+    width: selected ? 56 : 42,
+    height: 38,
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: selected ? .2 : .08),
+      borderRadius: BorderRadius.circular(15),
+      border: Border.all(
+        color: color.withValues(alpha: selected ? .5 : .12),
+        width: selected ? 1.2 : .7,
+      ),
+    ),
+    child: Icon(icon, color: color, size: selected ? 23 : 21),
+  );
+}
+
 class PlanerkaApp extends StatefulWidget {
   const PlanerkaApp({
     super.key,
@@ -224,7 +272,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Планерка',
+      title: 'Ритм дня',
       debugShowCheckedModeBanner: false,
       locale: const Locale('ru'),
       supportedLocales: const [Locale('ru'), Locale('en')],
@@ -239,15 +287,18 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
       home: Scaffold(
         appBar: AppBar(
           title: Text(switch (_tab) {
-            0 => 'Планерка',
+            0 => 'Ритм дня',
             1 => 'Inbox',
             2 => 'Фокус',
             _ => 'Прогресс',
           }),
           actions: [
             PopupMenuButton<String>(
-              tooltip: 'Тема',
-              icon: const Icon(Icons.palette_outlined),
+              tooltip: 'Цветовая тема',
+              icon: const _ActionGlyph(
+                icon: Icons.palette_rounded,
+                color: Color(0xFFFFC857),
+              ),
               onSelected: (value) {
                 final mode = ThemeMode.values.firstWhere(
                   (item) => item.name == value,
@@ -267,7 +318,10 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
             if (_tab == 3 && widget.database != null)
               IconButton(
                 tooltip: 'Игровой прогресс',
-                icon: const Icon(Icons.emoji_events_outlined),
+                icon: const _ActionGlyph(
+                  icon: Icons.emoji_events_rounded,
+                  color: Color(0xFFFFB84D),
+                ),
                 onPressed: () => Navigator.push(
                   context,
                   MaterialPageRoute<void>(
@@ -283,7 +337,10 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
               Builder(
                 builder: (context) => IconButton(
                   tooltip: 'Календарь',
-                  icon: const Icon(Icons.calendar_month_rounded),
+                  icon: const _ActionGlyph(
+                    icon: Icons.calendar_month_rounded,
+                    color: Color(0xFF66D8CE),
+                  ),
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute<void>(
@@ -297,7 +354,10 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
               Builder(
                 builder: (context) => IconButton(
                   tooltip: 'Проекты',
-                  icon: const Icon(Icons.folder_outlined),
+                  icon: const _ActionGlyph(
+                    icon: Icons.folder_special_rounded,
+                    color: Color(0xFFFFAE72),
+                  ),
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute<void>(
@@ -311,7 +371,10 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
               Builder(
                 builder: (context) => IconButton(
                   tooltip: 'Цели',
-                  icon: const Icon(Icons.flag_outlined),
+                  icon: const _ActionGlyph(
+                    icon: Icons.flag_rounded,
+                    color: Color(0xFFFF7FA8),
+                  ),
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute<void>(
@@ -325,6 +388,10 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
               Builder(
                 builder: (context) => PopupMenuButton<String>(
                   tooltip: 'Ещё',
+                  icon: const _ActionGlyph(
+                    icon: Icons.auto_awesome_rounded,
+                    color: Color(0xFFA991FF),
+                  ),
                   onSelected: (value) => Navigator.push(
                     context,
                     MaterialPageRoute<void>(
@@ -430,27 +497,67 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                 ],
               ),
         bottomNavigationBar: NavigationBar(
+          height: 82,
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          indicatorColor: Colors.transparent,
+          backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
           selectedIndex: _tab,
           onDestinationSelected: _selectTab,
           destinations: [
             NavigationDestination(
               key: const ValueKey('nav-today'),
-              icon: Icon(Icons.today_rounded),
+              icon: const _NavGlyph(
+                icon: Icons.wb_sunny_rounded,
+                color: Color(0xFFFFC857),
+                selected: false,
+              ),
+              selectedIcon: const _NavGlyph(
+                icon: Icons.wb_sunny_rounded,
+                color: Color(0xFFFFC857),
+                selected: true,
+              ),
               label: 'Сегодня',
             ),
             NavigationDestination(
               key: const ValueKey('nav-inbox'),
-              icon: Icon(Icons.inbox_rounded),
+              icon: const _NavGlyph(
+                icon: Icons.inbox_rounded,
+                color: Color(0xFF62C9FF),
+                selected: false,
+              ),
+              selectedIcon: const _NavGlyph(
+                icon: Icons.inbox_rounded,
+                color: Color(0xFF62C9FF),
+                selected: true,
+              ),
               label: 'Inbox',
             ),
             NavigationDestination(
               key: const ValueKey('nav-focus'),
-              icon: Icon(Icons.timer_outlined),
+              icon: const _NavGlyph(
+                icon: Icons.bolt_rounded,
+                color: Color(0xFFFF8C69),
+                selected: false,
+              ),
+              selectedIcon: const _NavGlyph(
+                icon: Icons.bolt_rounded,
+                color: Color(0xFFFF8C69),
+                selected: true,
+              ),
               label: 'Фокус',
             ),
             NavigationDestination(
               key: const ValueKey('nav-progress'),
-              icon: Icon(Icons.insights_rounded),
+              icon: const _NavGlyph(
+                icon: Icons.auto_graph_rounded,
+                color: Color(0xFFA991FF),
+                selected: false,
+              ),
+              selectedIcon: const _NavGlyph(
+                icon: Icons.auto_graph_rounded,
+                color: Color(0xFFA991FF),
+                selected: true,
+              ),
               label: 'Прогресс',
             ),
           ],

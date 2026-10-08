@@ -30,6 +30,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 240));
     await tester.pumpAndSettle();
 
+    expect(find.byTooltip('Цветовая тема'), findsOneWidget);
+    expect(find.byTooltip('Календарь'), findsOneWidget);
+    expect(find.byTooltip('Проекты'), findsOneWidget);
+    expect(find.byTooltip('Цели'), findsOneWidget);
+    expect(find.byTooltip('Ещё'), findsOneWidget);
     await tester.enterText(find.byKey(const Key('home-inbox-input')), 'Идея');
     await tester.tap(find.byKey(const Key('home-inbox-submit')));
     await tester.pumpAndSettle();
@@ -57,6 +62,7 @@ void main() {
     await tester.pumpWidget(PlanerkaApp(database: database));
     await tester.pumpAndSettle();
 
+    expect(find.byKey(const Key('nav-today')), findsOneWidget);
     final page = tester.getRect(find.byKey(const Key('main-page-view')));
     final gesture = await tester.startGesture(
       Offset(page.center.dx + 120, page.center.dy),
