@@ -1,7 +1,7 @@
 # Планерка — прогресс
 
-Глобальный план: `docs/SPEC.md`, SHA-256 `20A0C6F40A5B57FD6C38A4436B7DA012C1A93630A701532996426A98988D6DED`.
-Согласование: расширенная единая спецификация передана пользователю на проверку; реализация новых пунктов ожидает письменного утверждения спеки и плана.
+Глобальный план: `docs/SPEC.md`, SHA-256 `B37B06074A444ED1921D6B75F2E63F2AF28647658E3F230FE82CE6B98031D2D2`.
+Согласование: спецификация подтверждена пользователем 2026-10-08; подробный план G17–G29 подготовлен и ожидает отдельного ревью. Новые пункты кода не начаты.
 Метод: последовательная реализация; plan-driven TDD и отдельный коммит после каждого проверенного этапа.
 
 ## Baseline
@@ -254,3 +254,11 @@ G12 verification: 55 tests, analyzer, APK build/install passed.
 - Release `android-x64` APK copied to `C:\Users\d3c0r\Desktop\Планерка\Ритм-дня-emulator-x64.apk`, 41,156,403 bytes, SHA-256 `29FB57F24EC20049F31CF677ACEC8E6F2AD42CF4E6562E76F25900464F334EF1`.
 - Emulator `emulator-5556` is API35 x86_64. ARM64 install attempt failed by ABI mismatch, then x86_64 release installed successfully and app process launched. Existing logcat contained an older ARM64 mismatch before successful install; no fresh failure was observed after relaunch.
 - Personal `private/seed_define.json` remains ignored and absent from tracked files. Real-device Redmi Note 13 inference/background reminder behavior remains unverified.
+
+## Расширение v2 — цели G17–G29
+
+- Состояние: `WAITING_PLAN_REVIEW`; подробный TDD-план находится в `docs/SPEC.md`.
+- Зафиксированный baseline на 2026-10-08 до плана: `flutter analyze` clean; `flutter test --reporter compact` — 81 PASS. Flutter SDK не находится в текущем PATH; APK baseline для этого плана пока NOT_RUN. G17 повторно найдёт настроенный SDK и зафиксирует точные результаты с текущего HEAD.
+- Ни одна новая продуктовая задача G17–G29 не начата; текущие проверки новых изменений: `git diff --check`.
+- Предварительная очередь: G17 baseline; G18 экран целей; G19 цикл смен; G20 SQLite смен; G21 настройки/календарь; G22 сон/уведомления; G23 AI router/privacy; G24 временные блоки; G25 интервью; G26 штрафы; G27 виджет/статистика; G28 интерфейс; G29 APK/GitHub.
+- Формула в плане выставлена на ревью: недельная надёжность 100, −10 за подтверждённый штраф, максимум три в неделю, восстановительный шаг снимает один штраф; XP и уровни не уменьшаются.

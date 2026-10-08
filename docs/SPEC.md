@@ -38,6 +38,7 @@
 - «Сделать быстро» сразу попадает в план на сегодня. Незавершённая задача переносится на следующий день при смене дня.
 - Пока задача быстрого типа не выполнена, напоминание повторяется каждые 2 часа в активное время. Завершение отменяет повторы. К уведомлению добавляются действия «Выполнено» и «Перенести».
 - «Запланировать» открывает выбор даты и, при необходимости, времени. Календарь и список дня показывают сроки, просрочку и конфликты.
+- Плановый временной блок (`scheduled_at`, длительность в минутах) отделён от крайнего срока (`due_at`). Пользователь может задать начало и длительность; ИИ предлагает оценку и свободный интервал с учётом смен/дороги. Срок и блок не подменяют друг друга.
 - Большой проект содержит этапы и дочерние задачи. Для задач доступны срок, напоминание, статус и связи с одной или несколькими основными целями.
 - ИИ предлагает разбор текста, срок, подзадачи и цель-связь. Пользователь может поправить предложение перед применением.
 
@@ -57,7 +58,7 @@
 
 - На главной и в быстрых настройках есть переключатель режима сна.
 - При включённом режиме сна уведомления приложения не показываются; сроки и события остаются в календаре. После выключения сна приложение не отправляет пачку просроченных уведомлений: следующий повтор назначается через 2 часа активного времени.
-- Повторы быстрых задач, дедлайны и смены используют системные уведомления Android и восстанавливаются после перезапуска устройства. Учитываются разрешения уведомлений и ограничения точных будильников.
+- Повторы быстрых задач идут каждые 2 часа, пока режим сна выключен; расписание не ограничено жёстким временем суток. Дедлайны и смены используют системные уведомления Android и восстанавливаются после перезапуска устройства. Учитываются разрешения уведомлений и ограничения точных будильников.
 
 ### 5. Цели и совместное планирование с ИИ
 
@@ -136,8 +137,267 @@
 - Дневная смена 08:00–20:00, ночная 20:00–08:00; дорога по умолчанию 1 час до и 1,5 часа после.
 - Дизайн включает прогресс-бар цели сверху, центральную круглую цветную кнопку снизу, яркие карточки, современную тёмную тему и Android-виджет.
 
-## Открытые решения для ревью
+## Подтверждение спецификации
 
-- Подтвердить предложенный мягкий штраф: только предотвращаемый пропуск подтверждённого обещания, интервью, ручное согласие, максимум 3 балла за неделю; XP/уровни никогда не уменьшаются.
-- Подтвердить границы облачного этапа: интерфейс и безопасные настройки в общем выпуске; реальный облачный поставщик подключается, когда выбран сервис и его endpoint.
-- Подтвердить общий документ и порядок этапов выше. После ревью этот же файл дополнится детальными TDD-задачами; код не меняется до утверждения плана реализации.
+Пользователь подтвердил эту спецификацию 8 октября 2026 года. Подтверждены мягкая система штрафов, ручное подтверждение последствий, максимум три штрафных балла в неделю, запрет уменьшать заработанный XP/уровень и подготовка сменяемой архитектуры локального/облачного ИИ. Реальный облачный сервис подключается после выбора поставщика и endpoint. Следующий раздел — один подробный план реализации в этом же файле.
+
+---
+
+## Подробный план реализации: TDD
+
+> Выполнять цели последовательно. Для новой логики соблюдать RED → GREEN → регрессия → проверка APK по необходимости → отдельный commit. После каждого цикла обновлять `.agent/PROGRESS.md`.
+
+**Цель:** дополнить существующее Android-приложение сменным календарём, понятным экраном целей, режимом сна, безопасной сменой AI-провайдера, разбором невыполненных обещаний, виджетом и геймификацией с подтверждаемыми последствиями.
+
+**Архитектура:** оставить Flutter и SQLite. Чистые расчёты смен, прогресса, напоминаний и ответственности отделить от виджетов. Сменный AI-интерфейс использовать во всех AI-сценариях; локальный Qwen остаётся рабочим провайдером, облачный провайдер остаётся выключенным, пока не выбран endpoint и не разрешена передача контекста.
+
+**Стек:** существующие Flutter/Dart, SQLite, Android/Kotlin, llama.cpp и уведомления; добавить [`home_widget: ^0.10.0`](https://pub.dev/packages/home_widget) для Android-виджета и [`flutter_secure_storage: ^11.2.0`](https://pub.dev/packages/flutter_secure_storage) для будущих облачных секретов. Перед установкой подтвердить разрешение зависимостей текущим Flutter SDK; не менять major-версии существующих пакетов.
+
+**Спецификация:** `docs/SPEC.md`, версия 2.0, подтверждена пользователем 8 октября 2026 года. Этот раздел дополняет её конкретными интерфейсами, тестами и последовательностью.
+
+### Общие ограничения
+
+- Менять только согласованные Android-сценарии; сохранять имеющиеся Inbox, цели, таймеры, привычки, дневник, импорт/экспорт и модельный загрузчик.
+- SQLite остаётся единственным источником локальных задач и расписаний; новые версии БД только мигрируют данные вперёд, без удаления старых строк.
+- Использовать внедряемые часы, генераторы ID, AI-провайдеры и уведомления в тестах; не обращаться к сети и реальной модели из unit-тестов.
+- Локальная модель остаётся в приватной директории и не входит в APK или резервную копию; запускать только после проверки закреплённого SHA-256.
+- Облачный запрос запрещён без настройки поставщика и отдельного согласия на показанный состав данных. Не сохранять ключи API в SQLite, `app_metadata`, исходниках или логах.
+- AI-план, перенос, связь цели, разбор пропуска и штраф остаются предложениями; только выбранное пользователем подтверждение меняет данные.
+- Личный Inbox, дневник, имена руководителей, точная модель телефона, локальные пути, модель GGUF и личный APK не попадают в GitHub.
+- Пользовательские данные и настройки переживают миграцию, перезапуск приложения и перезагрузку Android.
+
+### Карта файлов и границ
+
+- `lib/core/app_database.dart`, `lib/core/models.dart`: версии схемы SQLite и общие типы без UI.
+- `lib/features/goals/`, `lib/features/home/`, `lib/app.dart`: доступ к целям, task-based прогресс и оболочка с центральным действием.
+- `lib/features/shifts/`: чистый восьмидневный расчёт, репозиторий смен, мастер настройки и календарные карточки.
+- `lib/features/reminders/`: режим сна, расписание повторов, сменные уведомления и обработка действий.
+- `lib/features/ai/`: provider router, закрытая передача контекста, интервью по пропуску и preview подтверждаемых предложений.
+- `lib/features/gamification/`, `lib/features/review/`: журнал штрафных событий, надёжность и статистика смен.
+- `lib/features/widget/`, `android/app/src/main/`: тестируемый снимок виджета и нативный Android-рендер/действия через `home_widget`.
+- `test/`: unit, widget, migration и provider-gate проверки; эмулятор нужен для системных уведомлений, виджета и установки APK.
+
+### Review Focus
+
+1. Дата до якоря, високосный год и отрицательный остаток по модулю: фаза смены должна совпадать с восьмидневным циклом. Закрепить в `test/features/shifts/shift_cycle_test.dart`.
+2. Ночная смена, переходящая через полночь или смену часового пояса: конец должен остаться позже начала и не сдвинуть рабочий день. Закрепить в тесте расчёта смен.
+3. Включение сна, закрытие приложения и пробуждение: старые уведомления должны отменяться; после пробуждения не должно быть очереди пропущенных повторов. Закрепить в `test/features/reminders_test.dart`.
+4. Отсутствующая/повреждённая модель, отключённый cloud provider и отказ в согласии: AI-действие должно открыть установку или показать блокировку; контекст не должен покинуть устройство. Закрепить в AI service и widget-тестах.
+5. Повторный callback уведомления или события завершения: задача, XP, посещение и штраф не должны записываться дважды. Закрепить в repository/gamification тестах.
+
+---
+
+### G17 — восстановить тестовый инструмент и записать baseline
+
+**Файлы:** `.agent/PROGRESS.md`.
+
+**Приёмка:** найден уже настроенный Flutter SDK; зафиксированы точная версия, HEAD и результаты тестов/анализа до кода. Установка второго SDK не нужна.
+
+- [ ] Проверить `git status --short`, `git rev-parse HEAD`, `flutter --version`; текущая оболочка не видит `flutter` в `PATH`, поэтому найти настроенный `flutter.bat` и запускать его по абсолютному пути.
+- [ ] Запустить `flutter test --reporter compact`; ожидается полный исходный набор без новых изменений приложения.
+- [ ] Запустить `flutter analyze` и `flutter build apk --debug`; записать реальные коды выхода и результаты.
+- [ ] При падении baseline записать причину и сначала восстановить рабочее окружение или классифицировать исходный дефект; не называть старый результат текущим GREEN.
+- [ ] Сохранить baseline и следующий ID цели в `.agent/PROGRESS.md`; проверить `git diff --check` и создать отдельный commit прогресса.
+
+### G18 — явный экран целей и круглая кнопка действия
+
+**Файлы:**
+- Изменить: `lib/app.dart`, `lib/features/home/home_screen.dart`, `lib/features/goals/goals_screen.dart`.
+- Тесты: `test/features/planning_test.dart`, `test/widgets/flagship_navigation_test.dart`; создать `test/widgets/goals_screen_test.dart`.
+
+**Интерфейсы:**
+- Добавить `Future<({int completed, int total})> PlanningRepository.goalTaskProgress(String goalId)`; учитывать связанные активные/выполненные задачи ровно один раз.
+- Главная карточка цели и экран целей читают тот же результат; при `total == 0` показывать нулевой прогресс и ясный призыв добавить шаг.
+- Центральная кнопка открывает лист быстрого ввода Inbox и добавления шага к выбранной цели.
+
+- [ ] RED: добавить `goalTaskProgressCountsOnlyLinkedTasks`, `goalsAreReachableFromHome`, `goalScreenShowsProgressAndEmptyState`, `aiGoalStepsRequireConfirmation` и `centerActionOpensQuickCapture`; прогон должен падать на отсутствующем интерфейсе/действии.
+- [ ] Реализовать SQL-счётчик связанных задач в `PlanningRepository`; дедуплицировать связи проекта и прямой связи цели.
+- [ ] Сделать вход в «Цели» видимым с главной и добавить верхний progress bar, список всех целей, связанный шаг и центральную цветную кнопку.
+- [ ] Запустить `flutter test test/features/planning_test.dart test/widgets/goals_screen_test.dart test/widgets/flagship_navigation_test.dart`, затем `flutter analyze`.
+- [ ] На эмуляторе проверить нулевой прогресс, несколько целей, возврат из экрана и нажатие центральной кнопки. Сделать commit G18.
+
+### G19 — детерминированный расчёт восьмидневного цикла смен
+
+**Файлы:** создать `lib/features/shifts/shift_models.dart`, `lib/features/shifts/shift_cycle.dart`, `test/features/shifts/shift_cycle_test.dart`.
+
+**Интерфейсы:**
+- `enum ShiftPhase { day, preNightRest, night, recovery, rest }`.
+- `class ShiftTeam { String id, String name, String leaderName, int colorValue, int phaseOffsetDays, bool attends }`; offsets are 0, 2, 4, 6 days.
+- `class ShiftSettings { DateTime anchorDate, int commuteBeforeMinutes = 60, int commuteAfterMinutes = 90, int reminderLeadMinutes = 30 }`.
+- `class ShiftDayStatus { DateTime date, String teamId, ShiftPhase phase, DateTime? workStart, DateTime? workEnd, DateTime? blockStart, DateTime? blockEnd }`.
+- `class ShiftOverride { String teamId, DateTime date, ShiftPhase phase, DateTime? workStart, DateTime? workEnd, bool cancelled }`.
+- `class ShiftPhaseAdjustment { String teamId, DateTime effectiveDate, int deltaDays }`; `enum ShiftAttendance { attended, missed }`.
+- `ShiftCycleCalculator.phaseAt({required DateTime date, required DateTime anchorDate, required int phaseOffsetDays}) -> ShiftPhase`.
+- `ShiftCycleCalculator.dayAt({required DateTime date, required DateTime anchorDate, required ShiftTeam team, required ShiftSettings settings}) -> ShiftDayStatus`.
+- `ShiftCycleCalculator.range({required DateTime start, required DateTime endExclusive, required DateTime anchorDate, required List<ShiftTeam> teams, required ShiftSettings settings}) -> List<ShiftDayStatus>`.
+
+- [ ] RED: покрыть все восемь фаз, offsets 0/2/4/6, дату до якоря, високосный февраль, границы года, day/night times и отсутствие интервалов у выходного/восстановительного дня.
+- [ ] Проверить точные значения: day work 08:00–20:00 и block 07:00–21:30; night work 20:00–08:00 следующего дня и block 19:00–09:30.
+- [ ] Реализовать расчёт по календарным датам и floor-modulo, не по прошедшим часам; хранить начало/конец как полные локальные DateTime.
+- [ ] Запустить `flutter test test/features/shifts/shift_cycle_test.dart` и `flutter analyze`; выполнить GREEN и повторить тест границ.
+- [ ] Сделать commit G19.
+
+### G20 — SQLite и репозиторий четырёх смен
+
+**Файлы:** изменить `lib/core/app_database.dart`; создать `lib/features/shifts/shift_repository.dart`, `test/features/shifts/shift_repository_test.dart`; расширить `test/core/database_test.dart`.
+
+**Интерфейсы:**
+- Поднять версию БД с 6 до 7.
+- Таблицы: `shift_teams` (название, руководитель, цвет, phase offset, посещение), `shift_settings` (якорь, дорога, напоминание), `shift_overrides` (исключение одной даты), `shift_adjustments` (сдвиг текущей и последующих дат), `shift_attendance` (ходил/пропустил).
+- `ShiftRepository(AppDatabase database, {DateTime Function()? now})`.
+- `saveSchedule(ShiftSettings settings, List<ShiftTeam> teams)`, `loadSettings()`, `listTeams()`, `setDayOverride(ShiftOverride value)`, `adjustFrom(ShiftPhaseAdjustment value)`, `setAttendance(String teamId, DateTime date, ShiftAttendance value)`, `calendar(DateTime start, DateTime endExclusive)`.
+
+- [ ] RED: сделать fixture БД v6 с задачей, целью, дневниковой записью и XP; тестировать миграцию до v7 без потери строк и создание новых таблиц.
+- [ ] RED: покрыть атомарное сохранение четырёх команд, duplicate IDs, выбор посещаемых смен, дату-only override, future adjustment, отметки посещения и повторное сохранение без дублей.
+- [ ] Добавить миграцию v6→v7 с foreign keys и indexes; новые сущности сохранять одной транзакцией.
+- [ ] Соединить репозиторий с `ShiftCycleCalculator`; результат `calendar()` применяет наиболее позднюю корректировку и исключение даты после базового цикла.
+- [ ] Запустить `flutter test test/core/database_test.dart test/features/shifts/shift_repository_test.dart test/features/shifts/shift_cycle_test.dart`; проверить `flutter analyze`. Сделать commit G20.
+
+### G21 — мастер настройки смен и общий календарь
+
+**Файлы:** создать `lib/features/shifts/shift_setup_screen.dart`, `lib/features/shifts/shift_calendar_section.dart`, `test/widgets/shift_setup_screen_test.dart`, `test/widgets/shift_calendar_test.dart`; изменить `lib/features/planning/calendar_screen.dart`, `lib/app.dart`.
+
+- [ ] RED: виджет-тесты `setupCreatesFourTeamsWithLeaders`, `setupPreviewUsesTwoDayOffsets`, `attendanceSelectionPersists`, `editOneDateDoesNotShiftCycle`, `adjustFromDateShiftsFutureOnly`, `nightShiftShowsNextDayEnd`.
+- [ ] Создать мастер: якорная дата/команда, четыре имени смен, руководитель каждой, автоматические редактируемые цвета, выбор смен посещения, дорожные интервалы и предварительный календарь.
+- [ ] Добавить в общий календарь смены четырёх цветов, выходной/отсыпной статус, время дороги, руководителя и отметку посещения; сохранять редактирование одной даты отдельно от будущего сдвига.
+- [ ] Планирование дня исключает рабочие и дорожные интервалы для выбранных пользователем смен.
+- [ ] Запустить оба widget-теста и `flutter analyze`; на API 35 эмуляторе создать 4 смены и просмотреть две полные недели. Сделать commit G21.
+
+### G22 — режим сна, повторы и сменные уведомления
+
+**Файлы:** создать `lib/features/reminders/sleep_mode_service.dart`, `test/features/sleep_mode_test.dart`; изменить `lib/features/reminders/reminder_service.dart`, `lib/features/reminders/local_notification_port.dart`, `lib/app.dart`, `lib/features/home/home_screen.dart`; расширить `test/features/reminders_test.dart`.
+
+**Интерфейсы:**
+- `SleepModeService(AppDatabase database, {DateTime Function()? now})` с `Future<bool> isEnabled()` и `Future<void> setEnabled(bool enabled)`; значение по умолчанию — `false`.
+- `ReminderService(AppDatabase database, NotificationPort notifications, {DateTime Function()? now, ShiftRepository? shifts, SleepModeService? sleepMode})` читает режим сна, задачи, таймеры и смены.
+- `NotificationPort.schedule(int id, String title, DateTime at, {List<NotificationAction> actions = const []})` и `setResponseHandler(Future<void> Function(String actionId, String payload) handler)` поддерживают действия Android-уведомления.
+- `NotificationAction` содержит `String id` и `String label`; обработчик принимает только известные действия и повторно проверяет состояние задачи перед записью.
+- Повторы рассчитываются в локальном часовом поясе, затем конвертируются в UTC для системного API.
+
+- [ ] RED: покрыть каждые 2 часа до выполнения, перенос быстрой задачи на новый календарный день, включение сна с отменой всех уведомлений, выключение без backlog и первый повтор ровно через 2 часа после пробуждения.
+- [ ] RED: покрыть напоминание за 30 минут до commute block, ночную смену, смену после текущего времени и отмену повторного уведомления после отметки посещения.
+- [ ] Добавить постоянный переключатель сна на главной; при его изменении атомарно сохранять состояние и вызывать `rescheduleAll()`.
+- [ ] Удалить жёсткую границу 20:00: повторы выполняются каждые 2 часа, пока сон выключен; на смене даты незавершённая quick-задача переносится, без пачки немедленных сигналов.
+- [ ] Добавить действия уведомления «Выполнено» и «Перенести»; для выполнения использовать `PlanningRepository.complete(String taskId)`, перенос назначает следующий слот через 2 часа.
+- [ ] Запустить `flutter test test/features/sleep_mode_test.dart test/features/reminders_test.dart`; проверить Android-уведомления на эмуляторе после force-stop и перезапуска устройства. Сделать commit G22.
+
+### G23 — единый AI provider router и безопасная настройка
+
+**Файлы:** создать `lib/features/ai/ai_provider_router.dart`, `lib/features/ai/ai_provider_settings.dart`, `lib/features/ai/secure_ai_store.dart`, `test/features/ai/ai_provider_router_test.dart`, `test/features/ai/ai_privacy_gate_test.dart`; изменить `lib/features/ai/model/local_ai_engine.dart`, `lib/features/ai/planning/ai_recommendation_service.dart`, `lib/features/ai/planning/ai_context_builder.dart`, `lib/features/ai/model/model_screen.dart`, `lib/app.dart`, `pubspec.yaml`.
+
+**Интерфейсы:**
+- Сохранить `AiTextGenerator.generate(String prompt, {int maxTokens = 256})` как доменный контракт; добавить `AiProviderRouter` с явно выбранным `local`/`cloud` и без автоматического fallback.
+- Cloud implementation разрешена только при наличии настроенного provider, endpoint и отдельного согласия на preview полей контекста. В этом выпуске никакой default endpoint не задаётся.
+- `SecureAiStore.read(String key)`, `write(String key, String value)`, `delete(String key)` использует `flutter_secure_storage`; API keys никогда не попадают в SQLite/логи.
+
+- [ ] RED: проверить local routing, cloud-disabled state, отказ пользователя, согласие на минимальный context, ошибку провайдера без переключения на сеть и отсутствие API key в `app_metadata`.
+- [ ] RED: проверить AI-кнопки Inbox и целей без модели: обе открывают ModelScreen и не блокируют остальные действия.
+- [ ] RED: проверить `diaryEnabled()` по умолчанию `false`; включённая настройка добавляет настроение только в явно показанный preview.
+- [ ] Реализовать роутер с внедрением обоих провайдеров; `LocalAiEngine` остаётся единственной включённой реализацией до конфигурации внешнего сервиса.
+- [ ] Добавить страницу AI-настроек: статус локальной модели, локальный/облачный режим, поля endpoint/provider, разрешение контекста и защищённое хранение секрета. Не отправлять данные до preview и явного подтверждения.
+- [ ] Любая AI-кнопка при отсутствующей/повреждённой локальной модели открывает модельный экран, показывает состояние восстановления и не показывает необработанный `StateError`.
+- [ ] Запустить `flutter test test/features/ai test/widgets/local_ai_screen_test.dart test/widgets/model_screen_test.dart`; проверить `flutter analyze` и offline-запрос на эмуляторе. Сделать commit G23.
+
+### G24 — временные блоки задач и AI-планирование вокруг смен
+
+**Файлы:** изменить `lib/core/app_database.dart`, `lib/core/models.dart`, `lib/features/planning/planning_repository.dart`, `lib/features/planning/calendar_screen.dart`, `lib/features/planning/today_screen.dart`, `lib/features/ai/planning/ai_context_builder.dart`, `lib/features/ai/planning/ai_recommendation_service.dart`, `lib/features/ai/planning/ai_suggestion.dart`; тесты `test/core/database_test.dart`, `test/features/planning_test.dart`, `test/features/ai/ai_recommendation_service_test.dart`.
+
+**Интерфейсы:**
+- Поднять схему БД с 7 до 8; добавить `tasks.scheduled_at TEXT` и `tasks.estimated_minutes INTEGER`. Не переписывать и не терять `due_at`, которое остаётся крайним сроком.
+- В `TaskEntry` добавить nullable `scheduledAt` и `estimatedMinutes`.
+- `PlanningRepository.setScheduleBlock(String taskId, DateTime scheduledAt, int estimatedMinutes)` и `clearScheduleBlock(String taskId)` сохраняют/удаляют временной блок; существующий `schedule(String taskId, DateTime dueAt)` продолжает устанавливать дедлайн.
+- В `AiPlanningContext` добавить ограниченные busy blocks выбранных смен/дороги и уже занятых задач. `TaskScheduleSuggestion` содержит `taskId`, `scheduledAt`, `durationMinutes`, `reason`.
+
+- [ ] RED: проверить миграцию БД v7→v8 без потери существующих дедлайнов; новую задачу без расписания; сохранение и очистку блока; положительную длительность; deadline независимо от start time.
+- [ ] RED: покрыть AI-слоты, которые не пересекают работу, дорогу, другие задачи и дедлайн; проверить независимость deadline/schedule, ночную смену, дату конца блока после полуночи и отсутствие свободного слота.
+- [ ] Реализовать typed busy blocks и валидатор до записи предложений; неизвестные task IDs, слот в прошлом, пересечение или длительность меньше 1 минуты отклоняются.
+- [ ] Добавить ручной выбор времени/длительности в план дня и отображение блока вместе с отдельным дедлайном в общем календаре; не менять `due_at` при обновлении `scheduled_at`.
+- [ ] «Перенести» AI-preview применяет только выбранные блоки через `setScheduleBlock`; закрытие preview не меняет БД.
+- [ ] Запустить focused tests, полный `flutter test test/features/planning_test.dart test/features/ai/ai_recommendation_service_test.dart test/core/database_test.dart`; проверить `flutter analyze`; сделать commit G24.
+
+### G25 — интервью с пользователем после пропуска задачи
+
+**Файлы:** создать `lib/features/ai/review/missed_task_review_service.dart`, `lib/features/ai/review/missed_task_review_screen.dart`, `test/features/ai/missed_task_review_test.dart`, `test/widgets/missed_task_review_screen_test.dart`.
+
+**Интерфейсы:**
+- `enum MissedTaskCause { externalObstacle, estimateWrong, priorityChanged, avoidableDelay }`.
+- `MissedTaskReviewService.startInterview(String taskId) -> Future<MissedTaskInterview>` возвращает 2–4 последовательных вопроса.
+- `MissedTaskReviewService.analyzeAnswers(String taskId, List<MissedTaskAnswer> answers) -> Future<MissedTaskProposal>` возвращает причину, объяснение и варианты: перенести, разделить, изменить срок или снять устаревшую задачу.
+- Сырой текст диалога не сохраняется автоматически; принятое действие использует существующие repository-функции только после preview.
+
+- [ ] RED: проверить неизвестный/завершённый task ID, пустой ответ, количество вопросов 2–4, невалидную схему, external obstacle, changed priority и avoidable delay.
+- [ ] Проверить, что сервис создаёт предложение, но не меняет SQLite; отмена ничего не меняет, подтверждение применяет выбранное действие ровно один раз.
+- [ ] Реализовать типизированные interview/answer/proposal и валидатор task ID, допустимых дат и вариантов действия.
+- [ ] Добавить UI вопрос-ответ с текстовым полем и вариантами, затем редактируемый preview; отсутствие модели ведёт к модельному экрану.
+- [ ] Запустить AI unit/widget tests; на эмуляторе проверить поток «пропуск → вопросы → ответы → рекомендация → отмена/подтверждение». Сделать commit G25.
+
+### G26 — подтверждаемая система штрафов без потери прогресса
+
+**Файлы:** изменить `lib/core/app_database.dart`, `lib/features/gamification/game_models.dart`, `lib/features/gamification/gamification_service.dart`, `lib/features/gamification/gamification_screen.dart`; создать `test/features/accountability_test.dart`; расширить `test/features/gamification_test.dart` и `test/core/database_test.dart`.
+
+**Предлагаемое точное правило для этого плана:** 100 очков недельной надёжности; один подтверждённый штраф уменьшает её на 10; предел — 3 штрафа за календарную неделю и минимум 70 очков. Завершение пользователем подтверждённого восстановительного шага снимает один штраф. Неделя начинается в понедельник. Этот расчёт не отнимает XP, уровень, достижения или историю. Пользователь проверяет эту формулу вместе с планом.
+
+**Интерфейсы:**
+- Поднять схему БД с 8 до 9; `accountability_events` содержит уникальный ID, task ID, дату начала недели, причину, баллы, статус подтверждения и необязательный ID восстановительного шага.
+- `GamificationService.proposePenalty(String taskId, MissedTaskCause cause) -> Future<PenaltyProposal>` ничего не записывает.
+- `confirmPenalty(PenaltyProposal proposal) -> Future<void>`, `reliabilityForWeek(DateTime date) -> Future<WeeklyReliability>` и `resolvePenalty(String eventId, String recoveryTaskId) -> Future<void>` идемпотентны и учитывают лимит недели.
+
+- [ ] RED: покрыть отключённый режим, болезнь/внешнее препятствие/перенос без штрафа, отмену preview, подтверждённый avoidable miss, лимит 3, границу понедельника, повторный ID, восстановление и неизменный XP.
+- [ ] RED: мигрировать fixture v8→v9 без потери задач, целей, дневника и XP.
+- [ ] Реализовать отдельный журнал ответственности; хранить подтверждённую причину-категорию и событие, не сырой текст интервью и не настроение.
+- [ ] Показать текущую надёжность, недельный лимит, историю и восстановительный шаг; дать выключить систему.
+- [ ] Запустить `flutter test test/features/accountability_test.dart test/features/gamification_test.dart test/core/database_test.dart test/widgets/gamification_screen_test.dart`; сделать commit G26.
+
+### G27 — Android-виджет и статистика смен/ответственности
+
+**Файлы:** добавить `home_widget: ^0.10.0` в `pubspec.yaml`; создать `lib/features/widget/widget_snapshot.dart`, `lib/features/widget/widget_sync_service.dart`, `test/features/widget_snapshot_test.dart`, `test/widgets/widget_sync_service_test.dart`; добавить Android provider/layout/metadata файлы по инструкции пакета; изменить `lib/features/review/review_service.dart`, `lib/features/review/progress_screen.dart`.
+
+**Интерфейсы:**
+- `PlannerWidgetSnapshot.fromRepositories(...)` формирует цель/процент, до трёх задач на сегодня и ближайшую выбранную смену с task ID для действия.
+- `WidgetSyncService.refresh()` сохраняет снимок через `HomeWidget.saveWidgetData` и вызывает `HomeWidget.updateWidget`.
+- Нажатие задачи в виджете открывает приложение по deep link; приложение проверяет task ID и вызывает `PlanningRepository.complete(String taskId)`.
+
+- [ ] RED: проверить пустую цель, 0/3/более 3 задач, просрочку, отсутствующую смену, кириллицу, неизвестный task ID и повторный tap.
+- [ ] Реализовать native Android widget с чёрной карточкой и яркой целью; нажатие проходит тот же completion-flow, что и приложение.
+- [ ] Добавить в `ReviewService` число смен «ходил/пропустил» и недельную надёжность; сохранить периоды день/неделя/месяц, настроение не влияет на оценку.
+- [ ] Запустить тесты snapshot/sync, `flutter analyze`; собрать debug APK, добавить виджет через launcher эмулятора и проверить cold-start tap, обновление после выполнения. Сделать commit G27.
+
+### G28 — визуальная полировка и регрессия экранов
+
+**Файлы:** изменить `lib/core/app_theme.dart`, `lib/app.dart`, `lib/features/home/`, `lib/features/inbox/`, `lib/features/planning/`, `lib/features/goals/`, `lib/features/ai/`, `lib/features/gamification/`, `lib/features/review/`, `lib/features/wellbeing/`; соответствующие widget-тесты.
+
+- [ ] RED: проверить чёрный фон, контраст, центральное круглое действие, progress bar цели, видимые входы в цели/AI и прокрутку при увеличенном шрифте.
+- [ ] Инвентаризировать стоковые серые иконки; привести экраны к ярким icon badges и единой палитре без смены смысла и accessibility labels.
+- [ ] Проверить loading/error/empty состояния, hit target, длинное название и клавиатуру; сохранить пользовательский фон.
+- [ ] Запустить все `test/widgets/`, `flutter analyze` и `flutter test --reporter compact`; исправить регрессии без удаления тестов.
+- [ ] Обновить Android launcher label и иконку на бренд «Ритм дня»; проверить имя под иконкой и в Android app info.
+- [ ] На API 35 x86_64 emulator проверить стандартный и увеличенный системный шрифт. Сделать commit G28.
+
+### G29 — сквозная Android-проверка, APK и GitHub
+
+**Файлы:** только исправления, необходимые сквозным тестам; build/asset настройки при доказанной необходимости; `.agent/PROGRESS.md` и инструкция сборки.
+
+- [ ] До сборки выполнить `git status --short`, `git diff --check`, проверить ignore и staged-файлы; исключить private seed, дневник, имена руководителей, API keys, GGUF, `.part` и личный APK.
+- [ ] Запустить `flutter test --reporter compact`, `flutter analyze`, `flutter build apk --debug`; установить на API 35 эмулятор и пройти сценарий: цель → Inbox → AI-план со сменой → сон → напоминание → интервью → штраф → виджет.
+- [ ] Проверить локальный AI в авиарежиме, missing/corrupt model, отказ SHA и отсутствие облачной отправки без endpoint и согласия.
+- [ ] Собрать ARM64 release APK; проверить ABI, min SDK, иконку, package, подпись, разрешения, размер и отсутствие модели/seed. Установить APK на API 35 эмулятор и целевой Android-смартфон; недоступную проверку пометить NOT_RUN, не COMPLETE.
+- [ ] Повторить полный test/analyze/diff-check; сделать commit G29 только после прохождения gates.
+- [ ] Опубликовать очищенную ветку и APK; проверить GitHub Release URL и SHA-256. Release прикреплять только после privacy audit.
+- [ ] Записать критерии и commit SHAs в `.agent/PROGRESS.md`; завершить цель только после проверки артефактов и эмуляторного запуска.
+
+### Зависимости целей
+
+`G17 → G18 → G19 → G20 → G21 → G22 → G23 → G24 → G25 → G26 → G27 → G28 → G29`.
+
+G19 не зависит от БД и даёт RED для календарного алгоритма. G20 хранит его результат. G21 соединяет календарь и настройки. G22 использует `ShiftRepository`. G23 поставляет общий AI router. G24 использует смены для временных блоков. G25 использует AI router для интервью. G26 использует только типизированную причину из G25. G27 читает подтверждённые данные репозиториев. G28 полирует shell. G29 выполняет сквозную поставку.
+
+### Самопроверка плана
+
+- Покрытие: главная/цели — G18; график, конфигурация и исключения дат — G19–G21; повторы и сон — G22; локальный/облачный AI seam, приватность и модель — G23; временные блоки и AI-планирование — G24; интервью — G25; штрафы — G26; виджет/статистика — G27; яркий UI — G28; APK/emulator/GitHub — G29.
+- Переходы типов закреплены интерфейсами G19→G20→G21, G22→G26, G23→G24→G25. Следующая цель не начинается до commit текущей.
+- Перечислены тесты для циклических дат, перехода полуночи, сна/перезапуска, недоступности модели, отказа облаку и повторных событий.
+- Текущий shell не находит команду `flutter`; первый этап обязан восстановить настроенный SDK до тестов. Последний записанный полный прогон в `.agent/PROGRESS.md` — 97 PASS при `flutter analyze` без замечаний до последнего документационного commit; новый baseline пока NOT_RUN.
+
+### Перед началом реализации
+
+Пользователь согласовал продуктовую спецификацию и ранее выбрал последовательную реализацию с TDD и отдельным commit после каждой цели. Требуется проверить, что данный подробный план сохраняет объём и предложенную точную формулу надёжности: 100 очков, −10 за подтверждённый штраф, максимум 3 за неделю, восстановление одного штрафа завершённым шагом, сброс в понедельник. Код до проверки этого плана не менять.
