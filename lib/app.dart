@@ -205,7 +205,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
     try {
       await _widgetSync?.refresh();
     } catch (_) {
-      // A launcher may temporarily reject widget updates; app data stays saved.
+      // Widget updates can fail while a launcher is unavailable.
     }
   }
 
@@ -216,6 +216,12 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
       planning: PlanningRepository(database),
       shifts: ShiftRepository(database),
     );
+    try {
+      await HomeWidget.saveWidgetData<String>('planner_widget_snapshot', null);
+    } catch (_) {
+      // No home_widget channel is available in widget tests or unsupported hosts.
+      return;
+    }
     _widgetSync = service;
     try {
       await service.refresh();
@@ -260,10 +266,8 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) unawaited(_syncReminders());
-    if (state == AppLifecycleState.resumed ||
-        state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.paused) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_syncReminders());
       unawaited(_refreshWidgetSilently());
     }
   }
@@ -272,7 +276,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
     try {
       await _widgetSync?.refresh();
     } catch (_) {
-      // Keep lifecycle transitions independent of launcher availability.
+      // Keep lifecycle changes independent of launcher availability.
     }
   }
 
