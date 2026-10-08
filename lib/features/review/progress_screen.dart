@@ -95,6 +95,33 @@ class _ProgressScreenState extends State<ProgressScreen> {
         icon: const Icon(Icons.calendar_month_rounded),
         label: Text(_rangeForCurrent()),
       ),
+      FutureBuilder<PeriodReview>(
+        future: _review,
+        builder: (context, snapshot) {
+          final review = snapshot.data;
+          if (review == null) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                Chip(
+                  avatar: const Icon(Icons.work_history_rounded, size: 18),
+                  label: Text(
+                    'Смены: ${review.attendedShifts} ходил · ${review.missedShifts} пропустил',
+                  ),
+                ),
+                if (_weekly && review.reliabilityScore != null)
+                  Chip(
+                    avatar: const Icon(Icons.shield_rounded, size: 18),
+                    label: Text('Надёжность: ${review.reliabilityScore}%'),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
       Expanded(
         child: FutureBuilder<PeriodReview>(
           future: _review,

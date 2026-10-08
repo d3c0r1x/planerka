@@ -260,7 +260,7 @@ G12 verification: 55 tests, analyzer, APK build/install passed.
 - Состояние: `IN_PROGRESS`; спека и план подтверждены, этапы выполняются по очереди.
 - Baseline G17 до новых функций: Flutter 3.47.6 / Dart 3.13.5; `flutter analyze` clean; `flutter test --reporter compact` — 97 PASS; debug APK собран.
 - G17–G19 завершены и отправлены; G20 реализован и проходит полную локальную регрессию.
-- Очередь: G17–G25 завершены; G26 штрафы; G27 виджет/статистика; G28 интерфейс; G29 APK/GitHub.
+- Очередь: G17–G26 завершены; G27 виджет/статистика; G28 интерфейс; G29 APK/GitHub.
 - Формула штрафов и недельной надёжности утверждена пользователем и будет реализована в G26: 100 очков, −10 за подтверждённый штраф, максимум 3 штрафа в неделю, завершённый восстановительный шаг снимает один штраф; XP и уровни не уменьшаются.
 
 ### G17 — baseline перед расширением
@@ -354,7 +354,7 @@ G12 verification: 55 tests, analyzer, APK build/install passed.
 
 ### G26 — подтверждаемая система штрафов без потери прогресса
 
-- Статус: IN_PROGRESS.
+- Статус: COMPLETE; commit `6d22712` (`feat: add confirmed accountability tracking`), опубликован в `origin/develop`.
 - Добавлены SQLite v9 accountability journal, сервис proposal/confirm, недельные 100 баллов, −10 за штраф, лимит три события и восстановление на 10 баллов.
 - Причины кроме avoidable delay отклоняются; отключённая система не выдаёт предложение. Повторный ID/task-week-cause идемпотентен. XP и уровни не меняются.
 - Экран показывает недельную надёжность, лимит, историю, переключатель и выбор использованного восстановительного шага.
@@ -363,4 +363,17 @@ G12 verification: 55 tests, analyzer, APK build/install passed.
 - G26 review findings закрыты: та же восстановительная задача не используется повторно, настройка ответственности сохраняется в backup, route ошибки проверяются в app widget test.
 - Verification: accountability/gamification/database/backup widget suites pass; полный `flutter test --reporter expanded` — 168 PASS; `flutter analyze` — No issues found; `git diff --check` — PASS.
 - API35 x86_64: v8 DB обновилась до v9 при запуске. Вкладка прогресса открывает экран игрового прогресса, на экране видны надёжность 100 и переключатель. Свежих Flutter/AndroidRuntime ошибок нет.
-- Осталось: финальный diff/privacy audit, commit и push.
+- Commit: `6d22712`.
+- Следующая цель: G27, Android-виджет и статистика смен/ответственности.
+
+### G27 — Android-widget and shift stats
+
+- Status: GREEN; commit after G28 regression to keep goal history clear.
+- Added widget snapshot for primary goal, progress, up to three tasks and next selected shift. Widget sync persists data and updates Android AppWidget.
+- Native widget shows dark progress card, task taps use cold-start deep links, revalidate status and avoid duplicate XP.
+- Progress now reports attended/missed shifts per selected period and weekly reliability. Mood does not affect score.
+- RED/GREEN: widget snapshot/sync + review + planning suites: 18 PASS. lutter analyze clean; git diff --check PASS.
+- Full test suite attempted three times. Parallel suite hit Windows Dart OOM. Sequential suite hangs in existing pumpAndSettle widget tests for Inbox, focus, goals and flagship navigation. Full regression gate remains blocked.
+- API35 emulator-5556: debug APK built, installed and launched; receiver registered. Synthetic cold-start task link completed task. Repeated tap kept same completed_at and XP event count 1. Launcher card visual not verified because no widget instance was pinned.
+- Build report in ndroid/build/ excluded from Git after build produced untracked Gradle diagnostic.
+- Next: G28 visual polish.

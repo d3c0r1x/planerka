@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:home_widget/home_widget.dart';
 import 'package:sqflite_common/sqlite_api.dart';
 
 import 'core/app_database.dart';
@@ -47,6 +48,7 @@ import 'features/timers/timer_repository.dart';
 import 'features/wellbeing/habits_screen.dart';
 import 'features/wellbeing/journal_screen.dart';
 import 'features/wellbeing/wellbeing_repository.dart';
+import 'features/widget/widget_sync_service.dart';
 
 class _ActionGlyph extends StatelessWidget {
   const _ActionGlyph({required this.icon, required this.color});
@@ -114,6 +116,7 @@ class PlanerkaApp extends StatefulWidget {
 
 class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
   final _navigatorKey = GlobalKey<NavigatorState>();
+  final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   int _tab = 0;
   int _inboxVersion = 0;
   late final PageController _pageController = PageController();
@@ -124,6 +127,8 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
   ThemeMode _themeMode = ThemeMode.dark;
   String? _backgroundPath;
   bool _sleepEnabled = false;
+  WidgetSyncService? _widgetSync;
+  StreamSubscription<Uri?>? _widgetClickSubscription;
 
   @override
   void initState() {
@@ -141,10 +146,11 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
         sleepMode: _sleepMode = SleepModeService(database),
       );
       unawaited(_loadSleepMode());
-      database.onRemindersChanged = _syncReminders;
+      database.onRemindersChanged = _syncAppServices;
       WidgetsBinding.instance.addPostFrameCallback(
-        (_) => unawaited(_syncReminders()),
+        (_) => unawaited(_syncAppServices()),
       );
+      unawaited(_initializeWidgetSync());
     }
   }
 
@@ -194,6 +200,52 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _syncAppServices() async {
+    await _syncReminders();
+    try {
+      await _widgetSync?.refresh();
+    } catch (_) {
+      // A launcher may temporarily reject widget updates; app data stays saved.
+    }
+  }
+
+  Future<void> _initializeWidgetSync() async {
+    final database = widget.database;
+    if (database == null) return;
+    final service = WidgetSyncService(
+      planning: PlanningRepository(database),
+      shifts: ShiftRepository(database),
+    );
+    _widgetSync = service;
+    try {
+      await service.refresh();
+    } catch (_) {
+      // No launcher/widget is a normal installation state.
+    }
+    try {
+      _widgetClickSubscription = HomeWidget.widgetClicked.listen(
+        (uri) => unawaited(_handleWidgetLaunch(uri)),
+        onError: (_) {},
+      );
+      final initialUri = await HomeWidget.initiallyLaunchedFromHomeWidget();
+      await _handleWidgetLaunch(initialUri);
+    } catch (_) {
+      // Non-Android builds and older plugin hosts may not provide widget intents.
+    }
+  }
+
+  Future<void> _handleWidgetLaunch(Uri? uri) async {
+    if (uri == null || !mounted) return;
+    final completed = await _widgetSync?.handleLaunchUri(uri) ?? false;
+    if (!mounted) return;
+    _selectTab(0);
+    if (completed) {
+      _scaffoldMessengerKey.currentState?.showSnackBar(
+        const SnackBar(content: Text('Задача отмечена выполненной')),
+      );
+    }
+  }
+
   Future<void> _loadSleepMode() async {
     final enabled = await _sleepMode?.isEnabled() ?? false;
     if (mounted) setState(() => _sleepEnabled = enabled);
@@ -209,11 +261,25 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) unawaited(_syncReminders());
+    if (state == AppLifecycleState.resumed ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
+      unawaited(_refreshWidgetSilently());
+    }
+  }
+
+  Future<void> _refreshWidgetSilently() async {
+    try {
+      await _widgetSync?.refresh();
+    } catch (_) {
+      // Keep lifecycle transitions independent of launcher availability.
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    unawaited(_widgetClickSubscription?.cancel());
     widget.database?.onRemindersChanged = null;
     _pageController.dispose();
     super.dispose();
@@ -236,6 +302,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
     final database = widget.database;
     if (database == null) return;
     await InboxRepository(database).add(text);
+    await _widgetSync?.refresh();
     if (mounted) setState(() => _inboxVersion++);
   }
 
@@ -348,6 +415,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _navigatorKey,
+      scaffoldMessengerKey: _scaffoldMessengerKey,
       title: 'Ритм дня',
       debugShowCheckedModeBanner: false,
       locale: const Locale('ru'),

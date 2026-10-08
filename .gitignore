@@ -52,3 +52,4 @@ app.*.map.json
 private/
 *.private.json
 *.private.apk
+/android/build/

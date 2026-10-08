@@ -26,6 +26,9 @@ class PeriodReview {
     required this.focusMinutes,
     required this.habitCheckins,
     required this.goals,
+    this.attendedShifts = 0,
+    this.missedShifts = 0,
+    this.reliabilityScore,
   });
 
   final DateTime start;
@@ -35,6 +38,9 @@ class PeriodReview {
   final int focusMinutes;
   final int habitCheckins;
   final List<GoalProgress> goals;
+  final int attendedShifts;
+  final int missedShifts;
+  final int? reliabilityScore;
 }
 
 class ReviewService {
@@ -74,6 +80,22 @@ class ReviewService {
       'goals',
       orderBy: 'created_at',
     );
+    final shiftRows = await database.database.rawQuery(
+      '''
+      SELECT status, COUNT(*) AS count FROM shift_attendance
+      WHERE date >= ? AND date < ? GROUP BY status
+      ''',
+      [_dateKey(start), _dateKey(end)],
+    );
+    final attendance = {
+      for (final row in shiftRows) row['status'] as String: row['count'] as int,
+    };
+    final weekStart = start.subtract(Duration(days: start.weekday - 1));
+    final penaltyRows = await database.database.rawQuery(
+      "SELECT COUNT(*) AS count FROM accountability_events WHERE week_start = ? AND status = 'confirmed'",
+      [_dateKey(weekStart)],
+    );
+    final penaltyCount = penaltyRows.single['count'] as int;
     return PeriodReview(
       start: start,
       endExclusive: end,
@@ -91,6 +113,9 @@ class ReviewService {
             ),
           )
           .toList(),
+      attendedShifts: attendance['attended'] ?? 0,
+      missedShifts: attendance['missed'] ?? 0,
+      reliabilityScore: (100 - penaltyCount * 10).clamp(70, 100),
     );
   }
 
