@@ -14,6 +14,7 @@ class ProjectsScreen extends StatefulWidget {
 
 class _ProjectsScreenState extends State<ProjectsScreen> {
   late Future<List<Project>> _projects;
+  bool _showOnlyGoals = false;
 
   @override
   void initState() {
@@ -86,6 +87,13 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Проекты')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => setState(() => _showOnlyGoals = !_showOnlyGoals),
+        icon: Icon(
+          _showOnlyGoals ? Icons.view_agenda_rounded : Icons.flag_rounded,
+        ),
+        label: Text(_showOnlyGoals ? 'Все проекты' : 'Цели'),
+      ),
       body: FutureBuilder<List<Project>>(
         future: _projects,
         builder: (context, snapshot) {
@@ -100,9 +108,17 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
               child: Text('Большие задачи появятся здесь после разбора Inbox.'),
             );
           }
+          final projects = snapshot.data!
+              .where((project) => !_showOnlyGoals || project.goalId != null)
+              .toList();
+          if (projects.isEmpty) {
+            return const Center(
+              child: Text('Пока нет проектов, связанных с целями.'),
+            );
+          }
           return ListView(
             padding: const EdgeInsets.all(16),
-            children: snapshot.data!
+            children: projects
                 .map(
                   (project) => Card(
                     child: Padding(
@@ -145,12 +161,35 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                               return Column(
                                 children: actions.data!
                                     .map(
-                                      (task) => ListTile(
-                                        leading: const Icon(
-                                          Icons
-                                              .subdirectory_arrow_right_rounded,
+                                      (task) => Card(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .surfaceContainerLow,
+                                        child: ListTile(
+                                          leading: const Icon(
+                                            Icons
+                                                .subdirectory_arrow_right_rounded,
+                                          ),
+                                          title: Text(task.title),
+                                          subtitle: FutureBuilder<List<TaskEntry>>(
+                                            future: widget.repository
+                                                .listTaskChildren(task.id),
+                                            builder: (context, children) =>
+                                                children.hasData &&
+                                                    children.data!.isNotEmpty
+                                                ? Text(
+                                                    'Подзадач: ${children.data!.length}',
+                                                  )
+                                                : const Text('Без подзадач'),
+                                          ),
+                                          trailing: IconButton(
+                                            tooltip: 'Добавить подзадачу',
+                                            icon: const Icon(
+                                              Icons.add_task_rounded,
+                                            ),
+                                            onPressed: () => _addSubtask(task),
+                                          ),
                                         ),
-                                        title: Text(task.title),
                                       ),
                                     )
                                     .toList(),
@@ -167,5 +206,32 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         },
       ),
     );
+  }
+
+  Future<void> _addSubtask(TaskEntry task) async {
+    var draft = '';
+    final title = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Новая подзадача'),
+        content: TextField(
+          autofocus: true,
+          onChanged: (value) => draft = value,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, draft.trim()),
+            child: const Text('Добавить'),
+          ),
+        ],
+      ),
+    );
+    if (title == null || title.isEmpty) return;
+    await widget.repository.addTaskChild(task.id, title);
+    if (mounted) _refresh();
   }
 }

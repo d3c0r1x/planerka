@@ -6,6 +6,7 @@ class TaskEntry {
     required this.createdAt,
     required this.updatedAt,
     this.dueAt,
+    this.parentTaskId,
   });
 
   final String id;
@@ -14,6 +15,7 @@ class TaskEntry {
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? dueAt;
+  final String? parentTaskId;
 
   Map<String, Object?> toMap() => {
     'id': id,
@@ -22,6 +24,7 @@ class TaskEntry {
     'created_at': createdAt.toIso8601String(),
     'updated_at': updatedAt.toIso8601String(),
     'due_at': dueAt?.toIso8601String(),
+    'parent_task_id': parentTaskId,
   };
 
   factory TaskEntry.fromMap(Map<String, Object?> map) => TaskEntry(
@@ -33,6 +36,7 @@ class TaskEntry {
     dueAt: map['due_at'] == null
         ? null
         : DateTime.parse(map['due_at'] as String),
+    parentTaskId: map['parent_task_id'] as String?,
   );
 }
 

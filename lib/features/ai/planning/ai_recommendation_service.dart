@@ -4,6 +4,7 @@ import 'package:sqflite_common/sqlite_api.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/app_database.dart';
+import '../../../core/models.dart';
 import '../../planning/planning_repository.dart';
 import '../model/local_ai_engine.dart';
 import 'ai_context_builder.dart';
@@ -41,6 +42,83 @@ class AiRecommendationService {
       'key': 'ai_include_diary',
       'value': enabled ? 'true' : 'false',
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<Goal>> listGoals() => PlanningRepository(database).listGoals();
+
+  Future<void> updateTaskGoalLinks(
+    String taskId,
+    Set<String> goalIds, {
+    String source = 'manual',
+  }) =>
+      PlanningRepository(database)
+          .setTaskGoalLinks(taskId, goalIds, source: source);
+
+  Future<Set<String>> linkedGoals(String taskId) =>
+      PlanningRepository(database).listTaskGoalLinks(taskId);
+
+  Future<void> setTaskGoalLinks(String taskId, Set<String> goalIds) async {
+    await PlanningRepository(database).setTaskGoalLinks(taskId, goalIds);
+  }
+
+  Future<List<AiGoalLink>> suggestGoalLinks(List<String> taskIds) async {
+    final ids = taskIds.toSet();
+    if (ids.isEmpty || ids.length > 20) return const [];
+    final tasks = await database.database.query(
+      'tasks',
+      columns: ['id', 'title', 'notes'],
+      where: 'id IN (${List.filled(ids.length, '?').join(',')})',
+      whereArgs: ids.toList(),
+    );
+    final goals = await listGoals();
+    if (tasks.isEmpty || goals.isEmpty) return const [];
+    final prompt =
+        '''
+Предложи, каким целям пользователя помогают задачи. Не выдумывай задачу и цель.
+Задачи: ${jsonEncode(tasks.map((row) => {'id': row['id'], 'title': row['title'], 'notes': row['notes']}).toList())}
+Цели: ${jsonEncode(goals.map((goal) => {'id': goal.id, 'title': goal.title}).toList())}
+Верни JSON: {"links":[{"taskId":"...","goalId":"...","reason":"..."}]}. Только явные полезные связи, до 3 на задачу.
+''';
+    final response = await generator.generate(prompt, maxTokens: 512);
+    final start = response.indexOf('{');
+    final end = response.lastIndexOf('}');
+    if (start < 0 || end <= start) {
+      throw const FormatException('ИИ вернул не JSON');
+    }
+    final decoded = jsonDecode(response.substring(start, end + 1));
+    if (decoded is! Map<String, dynamic> ||
+        decoded['links'] is! List ||
+        (decoded['links'] as List).length > ids.length * 3) {
+      throw const FormatException('ИИ вернул неверный список связей');
+    }
+    final knownGoals = goals.map((goal) => goal.id).toSet();
+    final knownTasks = tasks.map((row) => row['id'] as String).toSet();
+    final result = <AiGoalLink>[];
+    final seen = <String>{};
+    for (final raw in decoded['links'] as List) {
+      if (raw is! Map<String, dynamic>) {
+        throw const FormatException('Неверная связь цели');
+      }
+      final taskId = raw['taskId'];
+      final goalId = raw['goalId'];
+      final reason = raw['reason'];
+      if (taskId is! String ||
+          !knownTasks.contains(taskId) ||
+          goalId is! String ||
+          !knownGoals.contains(goalId) ||
+          reason is! String ||
+          reason.trim().isEmpty ||
+          reason.length > 240 ||
+          !seen.add('$taskId:$goalId')) {
+        throw const FormatException(
+          'ИИ предложил неизвестную или повторную связь',
+        );
+      }
+      result.add(
+        AiGoalLink(taskId: taskId, goalId: goalId, reason: reason.trim()),
+      );
+    }
+    return result;
   }
 
   Future<AiPlanningContext> buildContext() async {
@@ -195,6 +273,7 @@ class AiRecommendationService {
           throw StateError('Запись уже обработана');
         }
         String? projectId;
+        DateTime? quickReminder;
         if (item.disposition == 'project') {
           projectId = idGenerator.v4();
           await tx.insert('projects', {
@@ -214,12 +293,41 @@ class AiRecommendationService {
             whereArgs: [item.taskId],
           );
         } else {
+          final now = _now();
+          if (item.disposition == 'quick') {
+            final first = DateTime(
+              now.year,
+              now.month,
+              now.day,
+              9,
+            ).subtract(const Duration(hours: 1));
+            quickReminder = first.isAfter(now)
+                ? first
+                : now.add(
+                    Duration(hours: 2 - (now.difference(first).inHours % 2)),
+                  );
+          }
           await tx.update(
             'tasks',
             {
               'status': item.disposition,
               'project_id': projectId,
-              'updated_at': _now().toUtc().toIso8601String(),
+              'parent_task_id': null,
+              'scheduled_date': item.disposition == 'quick'
+                  ? '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}'
+                  : item.disposition == 'planned' && item.dueAt != null
+                  ? _formatDay(item.dueAt!)
+                  : null,
+              'due_at': item.dueAt?.toUtc().toIso8601String(),
+              'remind_at':
+                  (item.disposition == 'quick'
+                          ? quickReminder
+                          : item.disposition == 'planned'
+                          ? item.dueAt
+                          : null)
+                      ?.toUtc()
+                      .toIso8601String(),
+              'updated_at': now.toUtc().toIso8601String(),
             },
             where: 'id = ?',
             whereArgs: [item.taskId],

@@ -240,3 +240,17 @@ G12 verification: 55 tests, analyzer, APK build/install passed.
 - После исправления: focused model download tests — 7 PASS; полный suite — 92 PASS; `flutter analyze` clean; `git diff --check` PASS. API35 debug APK переустановлен и приложение запустилось.
 - Новый release arm64 собран и доставлен в Desktop. APK 39,533,625 bytes, package `com.planerka.mobile`, min SDK 28, v2 signature verified (Android Debug certificate/manual install). Разрешения проверены; содержит llama.cpp arm64, без GGUF. SHA-256: `DCBB00E6783F60C9E6A1D0B42BFC3DD3761E02371DAE9DCC20E7D519A7B33BE1`.
 - Коммит исправления: `f171150` (`fix: recover verified background model download`), опубликован в `origin/develop`. Рабочая копия чистая; `private/` не tracked.
+
+## R6 — Inbox workflow, goal links and black background
+
+- Статус: GREEN; release APKs built and x86_64 install/launch verified; commit and push pending.
+- Quick Inbox triage schedules task for today, rolls unfinished items to current day at app launch/resume, then queues two-hour reminders for remaining daytime slots. Completion cancels reminders.
+- Planned triage requests date and time; quick items appear in Today's plan. Projects now show parent tasks and allow child tasks without requiring a linked project record.
+- Goal links support multiple primary goals; AI proposes task-goal links for user confirmation. Goal progress draws from linked task/project work.
+- Main dark surface and Android system navigation bar use black. Background picker lives in Settings, copies image into app support storage, and applies translucent shells.
+- Replace backup retains private seed import marker to avoid reimporting seed rows.
+- RED/GREEN: new reminders rollover/cadence, task children, durable background, and revised planning tests added. Focused tests passed. Full `flutter test --reporter expanded`: 97 PASS. `flutter analyze`: No issues. `git diff --check`: PASS.
+- Release `android-arm64` APK copied to `C:\Users\d3c0r\Desktop\Планерка\Ритм-дня-arm64.apk`, 41,156,403 bytes, SHA-256 `EFD6012013C1172826D4F17F5EF8DF5958DDA0382A6095E46AAAEEDD2CF8C7E4`.
+- Release `android-x64` APK copied to `C:\Users\d3c0r\Desktop\Планерка\Ритм-дня-emulator-x64.apk`, 41,156,403 bytes, SHA-256 `29FB57F24EC20049F31CF677ACEC8E6F2AD42CF4E6562E76F25900464F334EF1`.
+- Emulator `emulator-5556` is API35 x86_64. ARM64 install attempt failed by ABI mismatch, then x86_64 release installed successfully and app process launched. Existing logcat contained an older ARM64 mismatch before successful install; no fresh failure was observed after relaunch.
+- Personal `private/seed_define.json` remains ignored and absent from tracked files. Real-device Redmi Note 13 inference/background reminder behavior remains unverified.

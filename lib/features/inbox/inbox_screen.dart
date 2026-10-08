@@ -4,6 +4,7 @@ import '../../core/models.dart';
 import '../ai/planning/ai_recommendation_service.dart';
 import 'inbox_repository.dart';
 import 'triage.dart';
+import '../../features/ai/planning/ai_suggestion.dart';
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key, required this.repository, this.ai});
@@ -32,8 +33,123 @@ class _InboxScreenState extends State<InboxScreen> {
   }
 
   Future<void> _triage(TaskEntry entry, TaskDisposition disposition) async {
-    await widget.repository.triage(entry.id, disposition);
+    DateTime? dueAt;
+    DateTime? remindAt;
+    if (disposition == TaskDisposition.quick) {
+      final now = DateTime.now();
+      final first = DateTime(
+        now.year,
+        now.month,
+        now.day,
+        9,
+      ).subtract(const Duration(hours: 1));
+      remindAt = first.isAfter(now)
+          ? first
+          : now.add(Duration(hours: 2 - (now.difference(first).inHours % 2)));
+    }
+    if (disposition == TaskDisposition.planned) {
+      final now = DateTime.now();
+      final date = await showDatePicker(
+        context: context,
+        initialDate: now.add(const Duration(days: 1)),
+        firstDate: DateTime(now.year, now.month, now.day),
+        lastDate: DateTime(now.year + 10),
+      );
+      if (date == null || !mounted) return;
+      final time = await showTimePicker(
+        context: context,
+        initialTime: const TimeOfDay(hour: 18, minute: 0),
+      );
+      if (time == null) return;
+      dueAt = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    }
+    await widget.repository.triage(
+      entry.id,
+      disposition,
+      dueAt: dueAt,
+      remindAt: remindAt,
+    );
     if (mounted) _refresh();
+  }
+
+  Future<void> _setGoals(TaskEntry entry, {bool fromAi = false}) async {
+    final ai = widget.ai;
+    Set<String> initial = {};
+    List<AiGoalLink> suggestions = [];
+    try {
+      if (ai == null) return;
+      final goals = await ai.listGoals();
+      if (fromAi) {
+        suggestions = await ai.suggestGoalLinks([entry.id]);
+        initial = suggestions.map((link) => link.goalId).toSet();
+      } else {
+        initial = await ai.linkedGoals(entry.id);
+      }
+      if (!mounted || goals.isEmpty) return;
+      final selected = <String>{...initial};
+      final accepted = await showDialog<Set<String>>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, update) => AlertDialog(
+            title: Text(
+              fromAi
+                  ? 'Предложение ИИ: связь с целью'
+                  : 'Цели, которым помогает задача',
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: goals.map((goal) {
+                String? reason;
+                for (final link in suggestions) {
+                  if (link.goalId == goal.id) reason = link.reason;
+                }
+                return CheckboxListTile(
+                  value: selected.contains(goal.id),
+                  title: Text(goal.title),
+                  subtitle: fromAi
+                      ? Text(reason ?? 'ИИ не предложил эту цель')
+                      : null,
+                  onChanged: (value) => update(() {
+                    if (value == true) {
+                      selected.add(goal.id);
+                    } else {
+                      selected.remove(goal.id);
+                    }
+                  }),
+                );
+              }).toList(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Отмена'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, selected),
+                child: const Text('Сохранить'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (accepted == null) return;
+      await ai.updateTaskGoalLinks(
+        entry.id,
+        accepted,
+        source: fromAi ? 'ai' : 'manual',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Связей с целями: ${accepted.length}')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Не удалось связать задачу с целью: $error')),
+        );
+      }
+    }
   }
 
   Future<void> _edit(TaskEntry entry) async {
@@ -168,7 +284,9 @@ class _InboxScreenState extends State<InboxScreen> {
                   key: const ValueKey('ai-inbox-triage'),
                   leading: const Icon(Icons.auto_awesome_rounded),
                   title: const Text('Умный разбор'),
-                  subtitle: const Text('ИИ предложит категории и причины'),
+                  subtitle: const Text(
+                    'ИИ предложит категории, сроки и причины',
+                  ),
                   trailing: _aiLoading
                       ? const CircularProgressIndicator()
                       : const Icon(Icons.chevron_right_rounded),
@@ -178,12 +296,24 @@ class _InboxScreenState extends State<InboxScreen> {
             }
             final entry = entries[index - (widget.ai == null ? 0 : 1)];
             return Card(
+              key: ValueKey('inbox-entry-${entry.id}'),
               child: ListTile(
                 title: Text(entry.title),
-                subtitle: const Text('Разобрать позже'),
+                subtitle: const Text('Новая запись · выбрать метку'),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    IconButton(
+                      tooltip: 'Связать с целью',
+                      icon: const Icon(Icons.flag_circle_rounded),
+                      onPressed: () => _setGoals(entry),
+                    ),
+                    if (widget.ai != null)
+                      IconButton(
+                        tooltip: 'Предложить цели с помощью ИИ',
+                        icon: const Icon(Icons.auto_awesome_rounded),
+                        onPressed: () => _setGoals(entry, fromAi: true),
+                      ),
                     IconButton(
                       tooltip: 'Изменить',
                       icon: const Icon(Icons.edit_rounded),
@@ -191,7 +321,7 @@ class _InboxScreenState extends State<InboxScreen> {
                     ),
                     PopupMenuButton<TaskDisposition>(
                       tooltip: 'Разобрать',
-                      icon: const Icon(Icons.more_horiz_rounded),
+                      icon: const Icon(Icons.sell_rounded),
                       onSelected: (disposition) => _triage(entry, disposition),
                       itemBuilder: (context) => TaskDisposition.values
                           .map(

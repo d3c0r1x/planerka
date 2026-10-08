@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:sqflite_common/sqlite_api.dart';
 
@@ -111,6 +112,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
   ModelStore? _modelStore;
   ModelDownloader? _sharedModelDownloader;
   ThemeMode _themeMode = ThemeMode.dark;
+  String? _backgroundPath;
 
   @override
   void initState() {
@@ -119,6 +121,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
     final database = widget.database;
     if (database != null) {
       unawaited(_loadThemeMode());
+      unawaited(_loadBackground());
       unawaited(_initializeModelStore());
       _reminders = ReminderService(
         database,
@@ -141,6 +144,23 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
     final value = rows.single['value'] as String;
     for (final mode in ThemeMode.values) {
       if (mode.name == value) setState(() => _themeMode = mode);
+    }
+  }
+
+  Future<void> _loadBackground() async {
+    final rows = await widget.database!.database.query(
+      'app_metadata',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: ['custom_background_path'],
+      limit: 1,
+    );
+    if (mounted) {
+      setState(
+        () => _backgroundPath = rows.isEmpty
+            ? null
+            : rows.single['value'] as String,
+      );
     }
   }
 
@@ -282,296 +302,337 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
         GlobalCupertinoLocalizations.delegate,
       ],
       theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
+      darkTheme: AppTheme.dark().copyWith(
+        scaffoldBackgroundColor: _backgroundPath == null
+            ? AppTheme.dark().colorScheme.surface
+            : Colors.transparent,
+        appBarTheme: AppTheme.dark().appBarTheme.copyWith(
+          backgroundColor: _backgroundPath == null
+              ? AppTheme.dark().colorScheme.surface
+              : Colors.transparent,
+        ),
+      ),
       themeMode: _themeMode,
+      builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+        value: const SystemUiOverlayStyle(
+          systemNavigationBarColor: Colors.black,
+          systemNavigationBarIconBrightness: Brightness.light,
+          systemNavigationBarDividerColor: Colors.black,
+          systemNavigationBarContrastEnforced: false,
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+        ),
+        child: child ?? const SizedBox.shrink(),
+      ),
       home: Scaffold(
-        appBar: AppBar(
-          title: Text(switch (_tab) {
-            0 => 'Ритм дня',
-            1 => 'Inbox',
-            2 => 'Фокус',
-            _ => 'Прогресс',
-          }),
-          actions: [
-            PopupMenuButton<String>(
-              tooltip: 'Цветовая тема',
-              icon: const _ActionGlyph(
-                icon: Icons.palette_rounded,
-                color: Color(0xFFFFC857),
-              ),
-              onSelected: (value) {
-                final mode = ThemeMode.values.firstWhere(
-                  (item) => item.name == value,
-                );
-                unawaited(_setThemeMode(mode));
-              },
-              itemBuilder: (context) => const [
-                PopupMenuItem(enabled: false, child: Text('Цветовая тема')),
-                PopupMenuItem(
-                  value: 'system',
-                  child: Text('Как на устройстве'),
-                ),
-                PopupMenuItem(value: 'light', child: Text('Светлая тема')),
-                PopupMenuItem(value: 'dark', child: Text('Тёмная тема')),
-              ],
-            ),
-            if (_tab == 3 && widget.database != null)
-              IconButton(
-                tooltip: 'Игровой прогресс',
-                icon: const _ActionGlyph(
-                  icon: Icons.emoji_events_rounded,
-                  color: Color(0xFFFFB84D),
-                ),
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                    builder: (_) => GamificationScreen(
-                      service:
-                          widget.gamificationDataSource ??
-                          GamificationService(widget.database!),
+        body: _backgroundPath == null
+            ? _mainScaffoldBody(context)
+            : DecoratedBox(
+                decoration: BoxDecoration(
+                  image: DecorationImage(
+                    image: FileImage(File(_backgroundPath!)),
+                    fit: BoxFit.cover,
+                    colorFilter: ColorFilter.mode(
+                      Colors.black.withValues(alpha: .58),
+                      BlendMode.darken,
                     ),
                   ),
                 ),
-              ),
-            if (_tab == 0 && widget.database != null) ...[
-              Builder(
-                builder: (context) => IconButton(
-                  tooltip: 'Календарь',
-                  icon: const _ActionGlyph(
-                    icon: Icons.calendar_month_rounded,
-                    color: Color(0xFF66D8CE),
-                  ),
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => CalendarScreen(
-                        repository: PlanningRepository(widget.database!),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Builder(
-                builder: (context) => IconButton(
-                  tooltip: 'Проекты',
-                  icon: const _ActionGlyph(
-                    icon: Icons.folder_special_rounded,
-                    color: Color(0xFFFFAE72),
-                  ),
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => ProjectsScreen(
-                        repository: PlanningRepository(widget.database!),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Builder(
-                builder: (context) => IconButton(
-                  tooltip: 'Цели',
-                  icon: const _ActionGlyph(
-                    icon: Icons.flag_rounded,
-                    color: Color(0xFFFF7FA8),
-                  ),
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => GoalsScreen(
-                        repository: PlanningRepository(widget.database!),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Builder(
-                builder: (context) => PopupMenuButton<String>(
-                  tooltip: 'Ещё',
-                  icon: const _ActionGlyph(
-                    icon: Icons.auto_awesome_rounded,
-                    color: Color(0xFFA991FF),
-                  ),
-                  onSelected: (value) => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => switch (value) {
-                        'habits' => HabitsScreen(
-                          repository: WellbeingRepository(widget.database!),
-                        ),
-                        'journal' => JournalScreen(
-                          repository: WellbeingRepository(widget.database!),
-                        ),
-                        'model' => ModelScreen(
-                          database: widget.database,
-                          downloader: _sharedModelDownloader,
-                          modelStore: _modelStore,
-                          enableBackgroundDownload: true,
-                        ),
-                        _ => BackupScreen(
-                          service: BackupService(widget.database!),
-                        ),
-                      },
-                    ),
-                  ),
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'habits', child: Text('Привычки')),
-                    PopupMenuItem(value: 'journal', child: Text('Дневник')),
-                    PopupMenuItem(value: 'model', child: Text('Локальный ИИ')),
-                    PopupMenuItem(
-                      value: 'backup',
-                      child: Text('Резервная копия'),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-        body: widget.database == null
-            ? const Center(child: Text('Ваш день начинается здесь'))
-            : PageView(
-                key: const Key('main-page-view'),
-                controller: _pageController,
-                onPageChanged: (index) {
-                  if (index != _tab) setState(() => _tab = index);
-                },
-                physics: const PageScrollPhysics(),
-                children: [
-                  HomeScreen(
-                    key: ValueKey('home-${_tab == 0}'),
-                    planning: PlanningRepository(widget.database!),
-                    wellbeing: WellbeingRepository(widget.database!),
-                    onInbox: () => _selectTab(1),
-                    onFocus: () => _selectTab(2),
-                    onHabits: () => Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(
-                        builder: (_) => HabitsScreen(
-                          repository: WellbeingRepository(widget.database!),
-                        ),
-                      ),
-                    ),
-                    onJournal: () => Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(
-                        builder: (_) => JournalScreen(
-                          repository: WellbeingRepository(widget.database!),
-                        ),
-                      ),
-                    ),
-                    onQuickCapture: _quickCapture,
-                    modelStore: _modelStore,
-                    modelDownloader: _sharedModelDownloader,
-                    onModel: () => Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(
-                        builder: (_) => ModelScreen(
-                          database: widget.database,
-                          downloader: _sharedModelDownloader,
-                          modelStore: _modelStore,
-                          enableBackgroundDownload: true,
-                        ),
-                      ),
-                    ),
-                    isActive: _tab == 0,
-                    onChooseGoal: () => Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(
-                        builder: (_) => GoalsScreen(
-                          repository: PlanningRepository(widget.database!),
-                        ),
-                      ),
-                    ),
-                  ),
-                  InboxScreen(
-                    key: ValueKey(_inboxVersion),
-                    repository: InboxRepository(widget.database!),
-                    ai: _localAiService(),
-                  ),
-                  FocusScreen(
-                    engine: TimerEngine(TimerRepository(widget.database!)),
-                    planning: PlanningRepository(widget.database!),
-                  ),
-                  ProgressScreen(service: ReviewService(widget.database!)),
-                ],
-              ),
-        bottomNavigationBar: NavigationBar(
-          height: 82,
-          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-          indicatorColor: Colors.transparent,
-          backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
-          selectedIndex: _tab,
-          onDestinationSelected: _selectTab,
-          destinations: [
-            NavigationDestination(
-              key: const ValueKey('nav-today'),
-              icon: const _NavGlyph(
-                icon: Icons.wb_sunny_rounded,
-                color: Color(0xFFFFC857),
-                selected: false,
-              ),
-              selectedIcon: const _NavGlyph(
-                icon: Icons.wb_sunny_rounded,
-                color: Color(0xFFFFC857),
-                selected: true,
-              ),
-              label: 'Сегодня',
-            ),
-            NavigationDestination(
-              key: const ValueKey('nav-inbox'),
-              icon: const _NavGlyph(
-                icon: Icons.inbox_rounded,
-                color: Color(0xFF62C9FF),
-                selected: false,
-              ),
-              selectedIcon: const _NavGlyph(
-                icon: Icons.inbox_rounded,
-                color: Color(0xFF62C9FF),
-                selected: true,
-              ),
-              label: 'Inbox',
-            ),
-            NavigationDestination(
-              key: const ValueKey('nav-focus'),
-              icon: const _NavGlyph(
-                icon: Icons.bolt_rounded,
-                color: Color(0xFFFF8C69),
-                selected: false,
-              ),
-              selectedIcon: const _NavGlyph(
-                icon: Icons.bolt_rounded,
-                color: Color(0xFFFF8C69),
-                selected: true,
-              ),
-              label: 'Фокус',
-            ),
-            NavigationDestination(
-              key: const ValueKey('nav-progress'),
-              icon: const _NavGlyph(
-                icon: Icons.auto_graph_rounded,
-                color: Color(0xFFA991FF),
-                selected: false,
-              ),
-              selectedIcon: const _NavGlyph(
-                icon: Icons.auto_graph_rounded,
-                color: Color(0xFFA991FF),
-                selected: true,
-              ),
-              label: 'Прогресс',
-            ),
-          ],
-        ),
-        floatingActionButton: _tab >= 2
-            ? null
-            : Builder(
-                builder: (context) => FloatingActionButton(
-                  onPressed: () => _add(context),
-                  tooltip: 'Добавить',
-                  child: const Icon(Icons.add_rounded),
-                ),
+                child: _mainScaffoldBody(context),
               ),
       ),
     );
   }
+
+  Widget _mainScaffoldBody(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: Text(switch (_tab) {
+        0 => 'Ритм дня',
+        1 => 'Inbox',
+        2 => 'Фокус',
+        _ => 'Прогресс',
+      }),
+      actions: [
+        PopupMenuButton<String>(
+          tooltip: 'Цветовая тема',
+          icon: const _ActionGlyph(
+            icon: Icons.palette_rounded,
+            color: Color(0xFFFFC857),
+          ),
+          onSelected: (value) {
+            final mode = ThemeMode.values.firstWhere(
+              (item) => item.name == value,
+            );
+            unawaited(_setThemeMode(mode));
+          },
+          itemBuilder: (context) => const [
+            PopupMenuItem(enabled: false, child: Text('Цветовая тема')),
+            PopupMenuItem(value: 'system', child: Text('Как на устройстве')),
+            PopupMenuItem(value: 'light', child: Text('Светлая тема')),
+            PopupMenuItem(value: 'dark', child: Text('Тёмная тема')),
+          ],
+        ),
+        if (_tab == 3 && widget.database != null)
+          IconButton(
+            tooltip: 'Игровой прогресс',
+            icon: const _ActionGlyph(
+              icon: Icons.emoji_events_rounded,
+              color: Color(0xFFFFB84D),
+            ),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => GamificationScreen(
+                  service:
+                      widget.gamificationDataSource ??
+                      GamificationService(widget.database!),
+                ),
+              ),
+            ),
+          ),
+        if (_tab == 0 && widget.database != null) ...[
+          Builder(
+            builder: (context) => IconButton(
+              tooltip: 'Календарь',
+              icon: const _ActionGlyph(
+                icon: Icons.calendar_month_rounded,
+                color: Color(0xFF66D8CE),
+              ),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => CalendarScreen(
+                    repository: PlanningRepository(widget.database!),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Builder(
+            builder: (context) => IconButton(
+              tooltip: 'Проекты',
+              icon: const _ActionGlyph(
+                icon: Icons.folder_special_rounded,
+                color: Color(0xFFFFAE72),
+              ),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => ProjectsScreen(
+                    repository: PlanningRepository(widget.database!),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Builder(
+            builder: (context) => IconButton(
+              tooltip: 'Цели',
+              icon: const _ActionGlyph(
+                icon: Icons.flag_rounded,
+                color: Color(0xFFFF7FA8),
+              ),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => GoalsScreen(
+                    repository: PlanningRepository(widget.database!),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Builder(
+            builder: (context) => PopupMenuButton<String>(
+              tooltip: 'Ещё',
+              icon: const _ActionGlyph(
+                icon: Icons.auto_awesome_rounded,
+                color: Color(0xFFA991FF),
+              ),
+              onSelected: (value) => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => switch (value) {
+                    'habits' => HabitsScreen(
+                      repository: WellbeingRepository(widget.database!),
+                    ),
+                    'journal' => JournalScreen(
+                      repository: WellbeingRepository(widget.database!),
+                    ),
+                    'model' => ModelScreen(
+                      database: widget.database,
+                      downloader: _sharedModelDownloader,
+                      modelStore: _modelStore,
+                      enableBackgroundDownload: true,
+                    ),
+                    _ => BackupScreen(service: BackupService(widget.database!)),
+                  },
+                ),
+              ),
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'habits', child: Text('Привычки')),
+                PopupMenuItem(value: 'journal', child: Text('Дневник')),
+                PopupMenuItem(value: 'model', child: Text('Локальный ИИ')),
+                PopupMenuItem(
+                  value: 'backup',
+                  child: Text('Настройки и резервная копия'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    ),
+    body: widget.database == null
+        ? const Center(child: Text('Ваш день начинается здесь'))
+        : PageView(
+            key: const Key('main-page-view'),
+            controller: _pageController,
+            onPageChanged: (index) {
+              if (index != _tab) setState(() => _tab = index);
+            },
+            physics: const PageScrollPhysics(),
+            children: [
+              HomeScreen(
+                key: ValueKey('home-${_tab == 0}'),
+                planning: PlanningRepository(widget.database!),
+                wellbeing: WellbeingRepository(widget.database!),
+                onInbox: () => _selectTab(1),
+                onFocus: () => _selectTab(2),
+                onHabits: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => HabitsScreen(
+                      repository: WellbeingRepository(widget.database!),
+                    ),
+                  ),
+                ),
+                onJournal: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => JournalScreen(
+                      repository: WellbeingRepository(widget.database!),
+                    ),
+                  ),
+                ),
+                onQuickCapture: _quickCapture,
+                modelStore: _modelStore,
+                modelDownloader: _sharedModelDownloader,
+                onModel: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => ModelScreen(
+                      database: widget.database,
+                      downloader: _sharedModelDownloader,
+                      modelStore: _modelStore,
+                      enableBackgroundDownload: true,
+                    ),
+                  ),
+                ),
+                isActive: _tab == 0,
+                onChooseGoal: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => GoalsScreen(
+                      repository: PlanningRepository(widget.database!),
+                    ),
+                  ),
+                ),
+              ),
+              InboxScreen(
+                key: ValueKey(_inboxVersion),
+                repository: InboxRepository(widget.database!),
+                ai: _localAiService(),
+              ),
+              FocusScreen(
+                engine: TimerEngine(TimerRepository(widget.database!)),
+                planning: PlanningRepository(widget.database!),
+              ),
+              ProgressScreen(service: ReviewService(widget.database!)),
+            ],
+          ),
+    bottomNavigationBar: AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        systemNavigationBarColor: Colors.black,
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarDividerColor: Colors.black,
+        systemNavigationBarContrastEnforced: false,
+      ),
+      child: NavigationBar(
+        height: 82,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        indicatorColor: Colors.transparent,
+        backgroundColor: Colors.black,
+        selectedIndex: _tab,
+        onDestinationSelected: _selectTab,
+        destinations: [
+          NavigationDestination(
+            key: const ValueKey('nav-today'),
+            icon: const _NavGlyph(
+              icon: Icons.wb_sunny_rounded,
+              color: Color(0xFFFFC857),
+              selected: false,
+            ),
+            selectedIcon: const _NavGlyph(
+              icon: Icons.wb_sunny_rounded,
+              color: Color(0xFFFFC857),
+              selected: true,
+            ),
+            label: 'Сегодня',
+          ),
+          NavigationDestination(
+            key: const ValueKey('nav-inbox'),
+            icon: const _NavGlyph(
+              icon: Icons.inbox_rounded,
+              color: Color(0xFF62C9FF),
+              selected: false,
+            ),
+            selectedIcon: const _NavGlyph(
+              icon: Icons.inbox_rounded,
+              color: Color(0xFF62C9FF),
+              selected: true,
+            ),
+            label: 'Inbox',
+          ),
+          NavigationDestination(
+            key: const ValueKey('nav-focus'),
+            icon: const _NavGlyph(
+              icon: Icons.bolt_rounded,
+              color: Color(0xFFFF8C69),
+              selected: false,
+            ),
+            selectedIcon: const _NavGlyph(
+              icon: Icons.bolt_rounded,
+              color: Color(0xFFFF8C69),
+              selected: true,
+            ),
+            label: 'Фокус',
+          ),
+          NavigationDestination(
+            key: const ValueKey('nav-progress'),
+            icon: const _NavGlyph(
+              icon: Icons.auto_graph_rounded,
+              color: Color(0xFFA991FF),
+              selected: false,
+            ),
+            selectedIcon: const _NavGlyph(
+              icon: Icons.auto_graph_rounded,
+              color: Color(0xFFA991FF),
+              selected: true,
+            ),
+            label: 'Прогресс',
+          ),
+        ],
+      ),
+    ),
+    floatingActionButton: _tab >= 2
+        ? null
+        : Builder(
+            builder: (context) => FloatingActionButton(
+              onPressed: () => _add(context),
+              tooltip: 'Добавить',
+              child: const Icon(Icons.add_rounded),
+            ),
+          ),
+  );
 }

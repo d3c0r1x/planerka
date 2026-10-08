@@ -60,16 +60,15 @@ void main() {
     await inbox.triage(quick.id, TaskDisposition.quick);
     await inbox.triage(planned.id, TaskDisposition.planned);
 
-    expect((await planning.listUnscheduled()).map((task) => task.id).toSet(), {
-      quick.id,
-      planned.id,
-    });
+    expect((await planning.listForDay(DateTime.utc(2026, 10, 8))).single.id,
+        quick.id);
+    expect((await planning.listUnscheduled()).single.id, planned.id);
     await planning.setToday(planned.id, DateTime.utc(2026, 10, 9));
     expect(
       (await planning.listForDay(DateTime.utc(2026, 10, 9))).single.id,
       planned.id,
     );
-    expect((await planning.listUnscheduled()).single.id, quick.id);
+    expect(await planning.listUnscheduled(), isEmpty);
   });
 
   test('project action and linked goal persist with manual progress', () async {
@@ -94,5 +93,28 @@ void main() {
     expect((await planning.listGoals()).single.progress, 25);
     expect((await planning.listGoals()).single.target, 100);
     expect((await planning.listGoals()).single.unit, '%');
+  });
+
+  test('task can help multiple goals and counts once for each goal', () async {
+    final task = await inbox.add('Подготовить запуск');
+    await inbox.triage(task.id, TaskDisposition.quick);
+    final goalA = await planning.addGoal('Запустить продукт');
+    final goalB = await planning.addGoal('Развить портфолио');
+    await planning.setTaskGoalLinks(task.id, {goalA.id, goalB.id});
+
+    expect(await planning.listTaskGoalLinks(task.id), {goalA.id, goalB.id});
+    expect((await planning.goalTaskCounts(goalA.id)).active, 1);
+    expect((await planning.goalTaskCounts(goalB.id)).active, 1);
+
+    await planning.setTaskGoalLinks(task.id, {goalB.id}, source: 'ai');
+    expect(await planning.listTaskGoalLinks(task.id), {goalB.id});
+  });
+
+  test('large project task contains selectable child tasks', () async {
+    final source = await inbox.add('Разработать приложение');
+    await inbox.triage(source.id, TaskDisposition.project);
+    final children = await planning.addTaskChild(source.id, 'Собрать экран');
+    expect(children.parentTaskId, source.id);
+    expect((await planning.listTaskChildren(source.id)).single.id, children.id);
   });
 }

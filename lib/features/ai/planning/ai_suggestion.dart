@@ -99,3 +99,15 @@ class AiSuggestionValidator {
     );
   }
 }
+
+class AiGoalLink {
+  const AiGoalLink({
+    required this.taskId,
+    required this.goalId,
+    required this.reason,
+  });
+
+  final String taskId;
+  final String goalId;
+  final String reason;
+}

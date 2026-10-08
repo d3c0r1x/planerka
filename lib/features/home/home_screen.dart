@@ -179,11 +179,12 @@ class _PrimaryGoalCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return FutureBuilder<Goal?>(
+    return FutureBuilder<List<Goal>>(
       future: (context.findAncestorWidgetOfExactType<HomeScreen>())!.planning
-          .primaryGoal(),
+          .primaryGoals(),
       builder: (context, snapshot) {
-        final goal = snapshot.data;
+        final goals = snapshot.data ?? const <Goal>[];
+        final goal = goals.isEmpty ? null : goals.first;
         return PressablePanel(
           key: const Key('primary-goal-card'),
           onTap: onTap,
@@ -256,6 +257,15 @@ class _PrimaryGoalCard extends StatelessWidget {
                                 ),
                           );
                         },
+                      ),
+                    if (goals.length > 1)
+                      Text(
+                        '+ ещё ${goals.length - 1} цели',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: colors.onPrimaryContainer.withValues(
+                            alpha: .78,
+                          ),
+                        ),
                       ),
                   ],
                 ),

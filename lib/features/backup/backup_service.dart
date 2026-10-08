@@ -36,6 +36,7 @@ class BackupService {
     'game_quests',
     'game_achievements',
     'custom_rewards',
+    'task_goal_links',
   ];
 
   Future<String> exportJson() async {
@@ -77,6 +78,15 @@ class BackupService {
 
     await database.database.transaction((transaction) async {
       if (mode == ImportMode.replace) {
+        final seedMarker = await transaction.query(
+          'app_metadata',
+          where: 'key = ?',
+          whereArgs: ['private_seed_imported'],
+        );
+        await transaction.delete('app_metadata');
+        if (seedMarker.isNotEmpty) {
+          await transaction.insert('app_metadata', seedMarker.single);
+        }
         for (final table in userTables.reversed) {
           await transaction.delete(table);
         }

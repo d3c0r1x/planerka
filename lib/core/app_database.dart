@@ -17,7 +17,7 @@ class AppDatabase {
     final database = await source.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 4,
+        version: 6,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: (db, version) async {
           await db.execute('''
@@ -37,6 +37,7 @@ class AppDatabase {
               notes TEXT NOT NULL DEFAULT '',
               status TEXT NOT NULL DEFAULT 'inbox',
               project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+              parent_task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
               due_at TEXT,
               remind_at TEXT,
               scheduled_date TEXT,
@@ -116,6 +117,10 @@ class AppDatabase {
             )
           ''');
           await _createGamificationTables(db);
+          await _createTaskGoalLinks(db);
+          await db.execute(
+            'CREATE INDEX tasks_parent_idx ON tasks(parent_task_id)',
+          );
         },
         onUpgrade: (db, oldVersion, newVersion) async {
           if (oldVersion < 2) {
@@ -138,6 +143,25 @@ class AppDatabase {
             );
           }
           if (oldVersion < 4) await _createGamificationTables(db);
+          if (oldVersion < 5) {
+            final tables = await db.rawQuery(
+              "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('tasks', 'goals')",
+            );
+            if (tables.length == 2) await _createTaskGoalLinks(db);
+          }
+          if (oldVersion < 6) {
+            final tables = await db.rawQuery(
+              "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'tasks'",
+            );
+            if (tables.isNotEmpty) {
+              await db.execute(
+                'ALTER TABLE tasks ADD COLUMN parent_task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE',
+              );
+              await db.execute(
+                'CREATE INDEX tasks_parent_idx ON tasks(parent_task_id)',
+              );
+            }
+          }
         },
       ),
     );
@@ -145,6 +169,21 @@ class AppDatabase {
   }
 
   Future<void> close() => database.close();
+
+  static Future<void> _createTaskGoalLinks(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE task_goal_links (
+        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+        source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual', 'ai')),
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(task_id, goal_id)
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX task_goal_links_goal_idx ON task_goal_links(goal_id)',
+    );
+  }
 
   static Future<void> _createGamificationTables(DatabaseExecutor db) async {
     await db.execute('''

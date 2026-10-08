@@ -34,23 +34,67 @@ class ReminderService {
     _allowed ??= await notifications.requestPermission();
     final previous = await notifications.pendingIds();
     final desired = <int, (String, DateTime)>{};
+    final now = _now();
     if (_allowed!) {
-      final now = _now().toUtc();
+      final today = _day(now);
+      await database.database.update(
+        'tasks',
+        {'scheduled_date': today, 'remind_at': now.toUtc().toIso8601String()},
+        where: "status = 'quick' AND scheduled_date < ?",
+        whereArgs: [today],
+      );
+      final nowUtc = now.toUtc();
       final taskRows = await database.database.query(
         'tasks',
-        where: "(due_at IS NOT NULL OR remind_at IS NOT NULL) AND status NOT IN ('completed', 'deleted', 'project')",
+        where: "status NOT IN ('completed', 'deleted', 'project') AND (status = 'quick' OR due_at IS NOT NULL OR remind_at IS NOT NULL)",
       );
       for (final row in taskRows) {
         final remind = row['remind_at'] as String?;
-        final dueText = (remind?.isNotEmpty ?? false)
-            ? remind!
-            : row['due_at'] as String;
-        final due = DateTime.parse(dueText).toUtc();
-        if (due.isAfter(now)) {
-          final bodyTitle = (remind?.isNotEmpty ?? false)
-              ? 'Напоминание: ${row['title'] as String}'
-              : 'Срок задачи: ${row['title'] as String}';
-          desired[_id('task:${row['id']}')] = (bodyTitle, due);
+        final taskId = row['id'] as String;
+        final title = row['title'] as String;
+        if (row['status'] == 'quick') {
+          final reminder = row['remind_at'] as String?;
+          final day = DateTime.parse('${row['scheduled_date']}T00:00:00');
+          final end = DateTime(day.year, day.month, day.day + 1);
+          final stop = DateTime(
+            day.year,
+            day.month,
+            day.day + 1,
+          ).subtract(const Duration(hours: 4));
+          var next = reminder == null || reminder.isEmpty
+              ? DateTime(day.year, day.month, day.day, 8)
+              : DateTime.parse(reminder).toLocal();
+          if (!next.isAfter(now)) {
+            final elapsed = now.difference(next).inMinutes;
+            next = next.add(Duration(minutes: ((elapsed ~/ 120) + 1) * 120));
+          }
+          while (next.isBefore(stop) && next.isBefore(end)) {
+            final instant = next.toUtc();
+            desired[_id('quick:$taskId:$instant.millisecondsSinceEpoch')] = (
+              'Пора сделать: $title',
+              instant,
+            );
+            next = next.add(const Duration(hours: 2));
+          }
+          continue;
+        }
+        if (row['due_at'] != null && row['status'] == 'planned') {
+          final due = DateTime.parse(row['due_at'] as String).toUtc();
+          if (due.isAfter(nowUtc)) {
+            desired[_id('task:$taskId:deadline')] = (
+              'Срок задачи: $title',
+              due,
+            );
+          }
+        }
+        if (remind?.isNotEmpty ?? false) {
+          final reminder = DateTime.parse(remind!).toUtc();
+          if (reminder.isAfter(nowUtc)) {
+            desired[_id('task:$taskId:reminder')] = (
+              'Напоминание: $title',
+              reminder,
+            );
+          }
         }
       }
       final timerRows = await database.database.query(
@@ -59,7 +103,7 @@ class ReminderService {
       );
       for (final row in timerRows) {
         final due = DateTime.parse(row['deadline_at'] as String).toUtc();
-        if (due.isAfter(now)) {
+        if (due.isAfter(nowUtc)) {
           final kind = row['kind'] as String;
           final title = switch (kind) {
             'focus' => 'Фокус завершён',
@@ -77,4 +121,7 @@ class ReminderService {
       await notifications.schedule(entry.key, entry.value.$1, entry.value.$2);
     }
   }
+
+  String _day(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 }

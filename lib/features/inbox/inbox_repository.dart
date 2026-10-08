@@ -74,6 +74,7 @@ class InboxRepository {
     String id,
     TaskDisposition disposition, {
     DateTime? dueAt,
+    DateTime? remindAt,
   }) async {
     await database.database.transaction((tx) async {
       final rows = await tx.query(
@@ -83,12 +84,13 @@ class InboxRepository {
       );
       if (rows.isEmpty) throw StateError('Запись уже разобрана или не найдена');
       String? projectId;
+      final now = _now();
       if (disposition == TaskDisposition.project) {
         projectId = _newId();
         await tx.insert('projects', {
           'id': projectId,
           'title': rows.single['title'],
-          'created_at': _now().toIso8601String(),
+          'created_at': now.toUtc().toIso8601String(),
         });
       }
       await tx.update(
@@ -96,8 +98,19 @@ class InboxRepository {
         {
           'status': disposition.name,
           'project_id': projectId,
-          'due_at': dueAt?.toIso8601String(),
-          'updated_at': _now().toIso8601String(),
+          'parent_task_id': null,
+          'due_at': dueAt?.toUtc().toIso8601String(),
+          'scheduled_date': disposition == TaskDisposition.quick
+              ? _day(now)
+              : disposition == TaskDisposition.planned && dueAt != null
+              ? _day(dueAt)
+              : null,
+          'remind_at': disposition == TaskDisposition.quick
+              ? (remindAt ?? now.add(const Duration(hours: 2)))
+                    .toUtc()
+                    .toIso8601String()
+              : remindAt?.toUtc().toIso8601String(),
+          'updated_at': now.toUtc().toIso8601String(),
         },
         where: 'id = ?',
         whereArgs: [id],
@@ -105,6 +118,9 @@ class InboxRepository {
     });
     await database.remindersChanged();
   }
+
+  String _day(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
   Future<void> classifyWithAi(
     String id,

@@ -25,6 +25,7 @@ class PlanningRepository {
       'tasks',
       {
         'due_at': dueAt.toUtc().toIso8601String(),
+        'remind_at': dueAt.toUtc().toIso8601String(),
         'updated_at': _now().toUtc().toIso8601String(),
       },
       where: 'id = ?',
@@ -57,6 +58,60 @@ class PlanningRepository {
       where: 'id = ?',
       whereArgs: [taskId],
     );
+  }
+
+  Future<void> setTaskGoalLinks(
+    String taskId,
+    Set<String> goalIds, {
+    String source = 'manual',
+  }) async {
+    if (source != 'manual' && source != 'ai') {
+      throw ArgumentError.value(source, 'source');
+    }
+    await database.database.transaction((tx) async {
+      final task = await tx.query(
+        'tasks',
+        columns: ['id'],
+        where: 'id = ?',
+        whereArgs: [taskId],
+        limit: 1,
+      );
+      if (task.isEmpty) throw StateError('Задача больше недоступна');
+      for (final goalId in goalIds) {
+        final goal = await tx.query(
+          'goals',
+          columns: ['id'],
+          where: 'id = ?',
+          whereArgs: [goalId],
+          limit: 1,
+        );
+        if (goal.isEmpty) throw StateError('Цель больше недоступна');
+      }
+      await tx.delete(
+        'task_goal_links',
+        where: 'task_id = ?',
+        whereArgs: [taskId],
+      );
+      final now = _now().toUtc().toIso8601String();
+      for (final goalId in goalIds) {
+        await tx.insert('task_goal_links', {
+          'task_id': taskId,
+          'goal_id': goalId,
+          'source': source,
+          'created_at': now,
+        });
+      }
+    });
+  }
+
+  Future<Set<String>> listTaskGoalLinks(String taskId) async {
+    final rows = await database.database.query(
+      'task_goal_links',
+      columns: ['goal_id'],
+      where: 'task_id = ?',
+      whereArgs: [taskId],
+    );
+    return rows.map((row) => row['goal_id'] as String).toSet();
   }
 
   Future<void> complete(String taskId) async {
@@ -101,7 +156,7 @@ class PlanningRepository {
   Future<List<TaskEntry>> listUnscheduled() async {
     final rows = await database.database.query(
       'tasks',
-      where: "status IN ('planned', 'quick') AND due_at IS NULL AND scheduled_date IS NULL",
+      where: "status = 'planned' AND due_at IS NULL AND scheduled_date IS NULL",
       orderBy: 'created_at',
     );
     return rows.map(TaskEntry.fromMap).toList();
@@ -124,7 +179,11 @@ class PlanningRepository {
         .toList();
   }
 
-  Future<TaskEntry> addAction(String projectId, String title) async {
+  Future<TaskEntry> addAction(
+    String projectId,
+    String title, {
+    String? parentTaskId,
+  }) async {
     final text = title.trim();
     if (text.isEmpty) {
       throw ArgumentError.value(title, 'title', 'Введите действие');
@@ -136,10 +195,12 @@ class PlanningRepository {
       status: 'planned',
       createdAt: now,
       updatedAt: now,
+      parentTaskId: parentTaskId,
     );
     await database.database.insert('tasks', {
       ...entry.toMap(),
       'project_id': projectId,
+      'parent_task_id': parentTaskId,
     });
     return entry;
   }
@@ -152,6 +213,44 @@ class PlanningRepository {
       orderBy: 'created_at',
     );
     return rows.map(TaskEntry.fromMap).toList();
+  }
+
+  Future<List<TaskEntry>> listTaskChildren(String parentTaskId) async {
+    final rows = await database.database.query(
+      'tasks',
+      where: 'parent_task_id = ?',
+      whereArgs: [parentTaskId],
+      orderBy: 'created_at',
+    );
+    return rows.map(TaskEntry.fromMap).toList();
+  }
+
+  Future<TaskEntry> addTaskChild(String parentTaskId, String title) async {
+    final parent = await database.database.query(
+      'tasks',
+      where: "id = ? AND status = 'project'",
+      whereArgs: [parentTaskId],
+      limit: 1,
+    );
+    if (parent.isEmpty) throw StateError('Проектная задача не найдена');
+    final titleText = title.trim();
+    if (titleText.isEmpty) throw ArgumentError.value(title, 'title');
+    final projectId = parent.single['project_id'] as String?;
+    final now = _now();
+    final task = TaskEntry(
+      id: _newId(),
+      title: titleText,
+      status: 'planned',
+      createdAt: now,
+      updatedAt: now,
+      parentTaskId: parentTaskId,
+    );
+    await database.database.insert('tasks', {
+      ...task.toMap(),
+      'project_id': projectId,
+      'parent_task_id': parentTaskId,
+    });
+    return task;
   }
 
   Future<Goal> addGoal(String title, {double? target, String unit = ''}) async {
@@ -223,6 +322,8 @@ class PlanningRepository {
   }
 
   Future<Goal?> primaryGoal() async {
+    final many = await primaryGoals();
+    if (many.isNotEmpty) return many.first;
     final setting = await database.database.query(
       'app_metadata',
       columns: ['value'],
@@ -240,16 +341,69 @@ class PlanningRepository {
     return null;
   }
 
+  Future<List<Goal>> primaryGoals() async {
+    final rows = await database.database.query(
+      'app_metadata',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: ['primary_goal_ids'],
+      limit: 1,
+    );
+    if (rows.isNotEmpty) {
+      final ids = (rows.single['value'] as String)
+          .split(',')
+          .where((id) => id.isNotEmpty)
+          .toSet();
+      final goals = await listGoals();
+      return goals.where((goal) => ids.contains(goal.id)).toList();
+    }
+    final setting = await database.database.query(
+      'app_metadata',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: ['primary_goal_id'],
+      limit: 1,
+    );
+    if (setting.isEmpty || (setting.single['value'] as String).isEmpty) {
+      return const [];
+    }
+    final goals = await listGoals();
+    return goals.where((goal) => goal.id == setting.single['value']).toList();
+  }
+
+  Future<void> setPrimaryGoals(Set<String> goalIds) async {
+    final goals = await listGoals();
+    final valid = goals.map((goal) => goal.id).toSet();
+    if (!valid.containsAll(goalIds)) {
+      throw StateError('Цель больше не существует');
+    }
+    await database.database.transaction((tx) async {
+      await tx.delete('app_metadata', where: "key LIKE 'primary_goal_%'");
+      if (goalIds.isNotEmpty) {
+        await tx.insert('app_metadata', {
+          'key': 'primary_goal_ids',
+          'value': goalIds.join(','),
+        });
+        await tx.insert('app_metadata', {
+          'key': 'primary_goal_id',
+          'value': goalIds.first,
+        });
+      }
+    });
+  }
+
   Future<({int completed, int active})> goalTaskCounts(String goalId) async {
     final rows = await database.database.rawQuery(
       '''
       SELECT
-        SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) AS completed,
-        SUM(CASE WHEN t.status IN ('planned', 'quick') THEN 1 ELSE 0 END) AS active
-      FROM projects p LEFT JOIN tasks t ON t.project_id = p.id
-      WHERE p.goal_id = ? AND p.archived_at IS NULL
+        COUNT(DISTINCT CASE WHEN t.status = 'completed' THEN t.id END) AS completed,
+        COUNT(DISTINCT CASE WHEN t.status IN ('planned', 'quick') THEN t.id END) AS active
+      FROM tasks t
+      WHERE (t.project_id IN (SELECT id FROM projects WHERE goal_id = ? AND archived_at IS NULL)
+          AND t.status != 'project')
+        OR (t.id IN (SELECT task_id FROM task_goal_links WHERE goal_id = ?) AND t.status != 'project')
       ''',
-      [goalId],
+      [goalId, goalId],
     );
     final row = rows.single;
     return (

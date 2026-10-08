@@ -22,39 +22,44 @@ class GoalsScreen extends StatefulWidget {
 
 class _GoalsScreenState extends State<GoalsScreen> {
   late Future<List<Goal>> _goals;
-  late Future<Goal?> _primary;
   bool _aiLoading = false;
-  String? _primaryGoalId;
+  Set<String> _primaryGoalIds = {};
 
   @override
   void initState() {
     super.initState();
     _goals = widget.repository.listGoals();
-    _primary = widget.repository.primaryGoal();
     unawaited(_loadPrimary());
   }
 
   void _refresh() {
     setState(() {
       _goals = widget.repository.listGoals();
-      _primary = widget.repository.primaryGoal();
     });
     unawaited(_loadPrimary());
   }
 
   Future<void> _loadPrimary() async {
-    final goal = await widget.repository.primaryGoal();
-    if (mounted && _primaryGoalId != goal?.id) {
-      setState(() => _primaryGoalId = goal?.id);
+    final goals = await widget.repository.primaryGoals();
+    if (mounted) {
+      setState(() => _primaryGoalIds = goals.map((goal) => goal.id).toSet());
     }
   }
 
   Future<void> _setPrimary(Goal goal) async {
-    await widget.repository.setPrimaryGoal(goal.id);
-    if (mounted) {
-      setState(() => _primaryGoalId = goal.id);
-      _refresh();
+    if (_primaryGoalIds.contains(goal.id)) {
+      await _editPrimaryGoalLinks(goal);
+      return;
     }
+    final updated = {..._primaryGoalIds, goal.id};
+    await widget.repository.setPrimaryGoals(updated);
+    if (mounted) setState(() => _primaryGoalIds = updated);
+  }
+
+  Future<void> _editPrimaryGoalLinks(Goal goal) async {
+    final updated = {..._primaryGoalIds}..remove(goal.id);
+    await widget.repository.setPrimaryGoals(updated);
+    if (mounted) setState(() => _primaryGoalIds = updated);
   }
 
   Future<void> _selectPrimaryGoal() async {
@@ -64,15 +69,66 @@ class _GoalsScreenState extends State<GoalsScreen> {
       context: context,
       builder: (context) => SimpleDialog(
         title: const Text('Главная цель'),
-        children: goals.map((goal) => SimpleDialogOption(
-          key: ValueKey('choose-goal-${goal.id}'),
-          onPressed: () => Navigator.pop(context, goal.id),
-          child: Text(goal.title),
-        )).toList(),
+        children: goals
+            .map(
+              (goal) => SimpleDialogOption(
+                key: ValueKey('choose-goal-${goal.id}'),
+                onPressed: () => Navigator.pop(context, goal.id),
+                child: Text(goal.title),
+              ),
+            )
+            .toList(),
       ),
     );
     if (primary == null) return;
     await widget.repository.setPrimaryGoal(primary);
+    if (mounted) _refresh();
+  }
+
+  Future<void> _selectPrimaryGoals() async {
+    final goals = await widget.repository.listGoals();
+    if (!mounted || goals.isEmpty) return;
+    final selected = (await widget.repository.primaryGoals())
+        .map((goal) => goal.id)
+        .toSet();
+    if (!mounted) return;
+    final accepted = await showDialog<Set<String>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, update) => AlertDialog(
+          title: const Text('Главные цели'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final goal in goals)
+                CheckboxListTile(
+                  value: selected.contains(goal.id),
+                  title: Text(goal.title),
+                  onChanged: (value) => update(() {
+                    if (value == true) {
+                      selected.add(goal.id);
+                    } else {
+                      selected.remove(goal.id);
+                    }
+                  }),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, selected),
+              child: const Text('Сохранить'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (accepted == null) return;
+    await widget.repository.setPrimaryGoals(accepted);
     if (mounted) _refresh();
   }
 
@@ -99,20 +155,33 @@ class _GoalsScreenState extends State<GoalsScreen> {
               width: double.maxFinite,
               child: ListView(
                 shrinkWrap: true,
-                children: steps.map((step) => CheckboxListTile(
-                  value: selected.contains(step),
-                  title: Text(step),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  onChanged: (value) => update(() {
-                    if (value == true) { selected.add(step); } else { selected.remove(step); }
-                  }),
-                )).toList(),
+                children: steps
+                    .map(
+                      (step) => CheckboxListTile(
+                        value: selected.contains(step),
+                        title: Text(step),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        onChanged: (value) => update(() {
+                          if (value == true) {
+                            selected.add(step);
+                          } else {
+                            selected.remove(step);
+                          }
+                        }),
+                      ),
+                    )
+                    .toList(),
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Отмена'),
+              ),
               FilledButton(
-                onPressed: selected.isEmpty ? null : () => Navigator.pop(context, selected.toList()),
+                onPressed: selected.isEmpty
+                    ? null
+                    : () => Navigator.pop(context, selected.toList()),
                 child: const Text('Добавить выбранные'),
               ),
             ],
@@ -259,97 +328,146 @@ class _GoalsScreenState extends State<GoalsScreen> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              FutureBuilder<Goal?>(
-                future: _primary,
-                builder: (context, primarySnapshot) => primarySnapshot.data == null
-                    ? Card(
-                        child: ListTile(
-                          key: const ValueKey('select-primary-goal'),
-                          leading: const Icon(Icons.flag_rounded),
-                          title: const Text('Выбрать главную цель'),
-                          onTap: _selectPrimaryGoal,
-                        ),
-                      )
-                    : const SizedBox.shrink(),
+              Card(
+                child: ListTile(
+                  key: const ValueKey('manage-primary-goals'),
+                  leading: const Icon(Icons.stars_rounded),
+                  title: const Text('Основные цели'),
+                  subtitle: const Text('Можно выбрать несколько'),
+                  onTap: _selectPrimaryGoals,
+                ),
               ),
-              FutureBuilder<Goal?>(
-                future: _primary,
-                builder: (context, primarySnapshot) {
-                  final primary = primarySnapshot.data;
-                  if (primary == null) return const SizedBox.shrink();
-                  return FutureBuilder<({int completed, int active})>(
-                    key: ValueKey('goal-progress-${primary.id}'),
-                    future: widget.repository.goalTaskCounts(primary.id),
-                    builder: (context, counts) {
-                      final value = counts.data;
-                      final total = (value?.completed ?? 0) + (value?.active ?? 0);
-                      final progress = total == 0 ? 0.0 : (value!.completed / total);
-                      return Card(
-                        key: const Key('primary-goal-progress'),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text('Главная цель', style: Theme.of(context).textTheme.labelLarge),
+              if (_primaryGoalIds.isEmpty)
+                Card(
+                  child: ListTile(
+                    key: const ValueKey('select-primary-goal'),
+                    leading: const Icon(Icons.flag_rounded),
+                    title: const Text('Выбрать главную цель'),
+                    onTap: _selectPrimaryGoal,
+                  ),
+                ),
+              for (final primary in snapshot.data!.where(
+                (goal) => _primaryGoalIds.contains(goal.id),
+              ))
+                FutureBuilder<({int completed, int active})>(
+                  key: ValueKey('goal-progress-${primary.id}'),
+                  future: widget.repository.goalTaskCounts(primary.id),
+                  builder: (context, counts) {
+                    final value = counts.data;
+                    final total =
+                        (value?.completed ?? 0) + (value?.active ?? 0);
+                    final progress = total == 0
+                        ? 0.0
+                        : (value!.completed / total);
+                    return Card(
+                      key: const Key('primary-goal-progress'),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Главная цель',
+                              style: Theme.of(context).textTheme.labelLarge,
+                            ),
                             const SizedBox(height: 8),
-                            Text(primary.title, style: Theme.of(context).textTheme.titleLarge),
+                            Text(
+                              primary.title,
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
                             const SizedBox(height: 12),
-                            LinearProgressIndicator(value: progress, minHeight: 8),
+                            LinearProgressIndicator(
+                              value: progress,
+                              minHeight: 8,
+                            ),
                             const SizedBox(height: 6),
-                            Text('${value?.completed ?? 0} из $total шагов выполнено'),
-                          ]),
+                            Text(
+                              '${value?.completed ?? 0} из $total шагов выполнено',
+                            ),
+                          ],
                         ),
-                      );
-                    },
-                  );
-                },
-              ),
+                      ),
+                    );
+                  },
+                ),
               ...snapshot.data!.map((goal) {
-                final isPrimary = goal.id == _primaryGoalId;
+                final isPrimary = _primaryGoalIds.contains(goal.id);
                 return Card(
-                  child: Column(children: [
-                    ListTile(
-                      title: Text(goal.title),
-                      subtitle: Text(isPrimary ? 'Главная · шаги: ${_progressLabel(goal)}' : _progressLabel(goal)),
-                      trailing: FutureBuilder<({int completed, int active})>(
-                        future: widget.repository.goalTaskCounts(goal.id),
-                        builder: (context, counts) {
-                          final value = counts.data;
-                          final total = (value?.completed ?? 0) + (value?.active ?? 0);
-                          final taskProgress = total == 0 ? 0.0 : value!.completed / total;
-                          return Row(mainAxisSize: MainAxisSize.min, children: [
-                            if (isPrimary) SizedBox(
-                              width: 38,
-                              height: 38,
-                              child: CircularProgressIndicator(value: taskProgress, strokeWidth: 4),
+                  child: Column(
+                    children: [
+                      ListTile(
+                        title: Text(goal.title),
+                        subtitle: Text(
+                          isPrimary
+                              ? 'Главная · шаги: ${_progressLabel(goal)}'
+                              : _progressLabel(goal),
+                        ),
+                        trailing: FutureBuilder<({int completed, int active})>(
+                          future: widget.repository.goalTaskCounts(goal.id),
+                          builder: (context, counts) {
+                            final value = counts.data;
+                            final total =
+                                (value?.completed ?? 0) + (value?.active ?? 0);
+                            final taskProgress = total == 0
+                                ? 0.0
+                                : value!.completed / total;
+                            return Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (isPrimary)
+                                  SizedBox(
+                                    width: 38,
+                                    height: 38,
+                                    child: CircularProgressIndicator(
+                                      value: taskProgress,
+                                      strokeWidth: 4,
+                                    ),
+                                  ),
+                                IconButton(
+                                  tooltip: 'Сделать главной целью',
+                                  onPressed: () => _setPrimary(goal),
+                                  icon: Icon(
+                                    isPrimary
+                                        ? Icons.star_rounded
+                                        : Icons.star_outline_rounded,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                      OverflowBar(
+                        alignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton.icon(
+                            onPressed: _aiLoading
+                                ? null
+                                : () => _generateSteps(goal),
+                            icon: const Icon(Icons.auto_awesome_rounded),
+                            label: const Text('Шаги от ИИ'),
+                          ),
+                          TextButton.icon(
+                            key: ValueKey('primary-goal-select-${goal.id}'),
+                            onPressed: () => _setPrimary(goal),
+                            icon: Icon(
+                              isPrimary
+                                  ? Icons.star_rounded
+                                  : Icons.flag_rounded,
                             ),
-                            IconButton(
-                              tooltip: 'Сделать главной целью',
-                              onPressed: () => _setPrimary(goal),
-                              icon: Icon(isPrimary ? Icons.star_rounded : Icons.star_outline_rounded),
+                            label: Text(
+                              isPrimary ? 'Главная' : 'Сделать главной',
                             ),
-                          ]);
-                        },
+                          ),
+                          IconButton(
+                            tooltip: 'Обновить прогресс',
+                            onPressed: () => _updateProgress(goal),
+                            icon: const Icon(Icons.tune_rounded),
+                          ),
+                        ],
                       ),
-                    ),
-                    OverflowBar(alignment: MainAxisAlignment.end, children: [
-                      TextButton.icon(
-                        onPressed: _aiLoading ? null : () => _generateSteps(goal),
-                        icon: const Icon(Icons.auto_awesome_rounded),
-                        label: const Text('Шаги от ИИ'),
-                      ),
-                      TextButton.icon(
-                        key: ValueKey('primary-goal-select-${goal.id}'),
-                        onPressed: () => _setPrimary(goal),
-                        icon: Icon(isPrimary ? Icons.star_rounded : Icons.flag_rounded),
-                        label: Text(isPrimary ? 'Главная' : 'Сделать главной'),
-                      ),
-                      IconButton(
-                        tooltip: 'Обновить прогресс',
-                        onPressed: () => _updateProgress(goal),
-                        icon: const Icon(Icons.tune_rounded),
-                      ),
-                    ]),
-                  ]),
+                    ],
+                  ),
                 );
               }),
             ],

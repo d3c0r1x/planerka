@@ -77,6 +77,48 @@ void main() {
   });
 
   test(
+    'quick action reminders repeat every two hours and stop after completion',
+    () async {
+      final repo = InboxRepository(database, now: () => now);
+      final task = await repo.add('Короткое дело');
+      await repo.triage(task.id, TaskDisposition.quick);
+
+      await reminders.rescheduleAll();
+      expect(notifications.scheduled.values.toSet(), {
+        DateTime.utc(2026, 10, 8, 14),
+        DateTime.utc(2026, 10, 8, 16),
+      });
+
+      final afternoon = DateTime.utc(2026, 10, 8, 15);
+      final later = ReminderService(
+        database,
+        notifications,
+        now: () => afternoon,
+      );
+      await later.rescheduleAll();
+      expect(notifications.scheduled.values.toSet(), {
+        DateTime.utc(2026, 10, 8, 16),
+      });
+
+      await PlanningRepository(database).complete(task.id);
+      await later.rescheduleAll();
+      expect(notifications.scheduled, isEmpty);
+    },
+  );
+
+  test('unfinished quick task rolls into today after midnight', () async {
+    final repo = InboxRepository(database, now: () => now);
+    final task = await repo.add('Вычислительная задача');
+    await repo.triage(task.id, TaskDisposition.quick);
+    final tomorrow = DateTime.utc(2026, 10, 9, 1);
+    final nextDay = ReminderService(database, notifications, now: () => tomorrow);
+    await nextDay.rescheduleAll();
+    final row = (await database.database.query('tasks')).single;
+    expect(row['scheduled_date'], '2026-10-09');
+      expect(notifications.scheduled.values, contains(DateTime.utc(2026, 10, 9, 3)));
+  });
+
+  test(
     'explicit task reminder is persisted and cancelled on completion',
     () async {
       final task = await InboxRepository(database).add('Позвонить');

@@ -45,7 +45,10 @@ class AiInboxTaskContext {
 
 class AiInboxSuggestion {
   const AiInboxSuggestion({required this.items, required this.titles});
-  final List<({String taskId, String disposition, String reason})> items;
+  final List<
+    ({String taskId, String disposition, String reason, DateTime? dueAt})
+  >
+  items;
   final Map<String, String> titles;
 }
 
@@ -159,8 +162,8 @@ class AiContextBuilder {
 
   String inboxPrompt(List<AiInboxTaskContext> tasks) =>
       '''Ты локальный помощник для разбора Inbox.
-Для каждой записи выбери категорию: quick, planned, project или deleted. Не выдумывай ID, не удаляй ничего, не назначай даты.
-Ответ только JSON: {"items":[{"taskId":"id","disposition":"quick|planned|project|deleted","reason":"короткая причина"}]}.
+Для каждой записи выбери категорию: quick, planned, project или deleted. Не выдумывай ID, не удаляй ничего. Для planned предложи dueAt в ISO 8601 или null.
+Ответ только JSON: {"items":[{"taskId":"id","disposition":"quick|planned|project|deleted","dueAt":"YYYY-MM-DDTHH:mm:ss" или null,"reason":"короткая причина"}]}.
 Записи: ${jsonEncode(tasks.take(20).map((task) => {'id': task.id, 'title': _limit(task.title, 120), 'notes': _limit(task.notes, 160)}).toList())}''';
 
   AiInboxSuggestion parseInbox(
@@ -187,7 +190,10 @@ class AiContextBuilder {
     }
     final allowed = tasks.map((item) => item.id).toSet();
     final seen = <String>{};
-    final output = <({String taskId, String disposition, String reason})>[];
+    final output =
+        <
+          ({String taskId, String disposition, String reason, DateTime? dueAt})
+        >[];
     for (final item in raw) {
       if (item is! Map<String, dynamic>) {
         throw const FormatException('Неверный пункт');
@@ -195,17 +201,26 @@ class AiContextBuilder {
       final id = item['taskId'];
       final disposition = item['disposition'];
       final reason = item['reason'];
+      final dueRaw = item['dueAt'];
+      final dueAt = dueRaw == null ? null : DateTime.tryParse(dueRaw as String);
       if (id is! String ||
           !allowed.contains(id) ||
           !seen.add(id) ||
           disposition is! String ||
           !{'quick', 'planned', 'project', 'deleted'}.contains(disposition) ||
+          dueRaw != null && (dueAt == null || dueAt.isBefore(DateTime.now())) ||
+          disposition == 'planned' && dueAt == null ||
           reason is! String ||
           reason.trim().isEmpty ||
           reason.length > 160) {
         throw const FormatException('Рекомендация не прошла проверку');
       }
-      output.add((taskId: id, disposition: disposition, reason: reason.trim()));
+      output.add((
+        taskId: id,
+        disposition: disposition,
+        reason: reason.trim(),
+        dueAt: dueAt,
+      ));
     }
     return AiInboxSuggestion(
       items: output,

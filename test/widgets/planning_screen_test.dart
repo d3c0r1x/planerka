@@ -112,7 +112,8 @@ void main() {
     await tester.pumpAndSettle();
     final selected = await PlanningRepository(database).primaryGoal();
     expect(selected?.title, 'Выпустить приложение');
-    final counts = await PlanningRepository(database).goalTaskCounts(selected!.id);
+    final counts = await PlanningRepository(database)
+        .goalTaskCounts(selected!.id);
     expect(counts.completed + counts.active, 0);
     expect(await database.database.query('tasks'), isEmpty);
   });

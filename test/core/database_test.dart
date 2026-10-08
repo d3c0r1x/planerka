@@ -60,6 +60,7 @@ void main() {
         'habit_logs',
         'journal_entries',
         'timer_sessions',
+        'task_goal_links',
       ]),
     );
     await db.close();

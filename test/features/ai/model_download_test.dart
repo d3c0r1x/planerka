@@ -8,20 +8,36 @@ import 'package:planerka/features/ai/model/model_manifest.dart';
 import 'package:planerka/features/ai/model/model_store.dart';
 
 void main() {
-  test('native download in the app model directory survives SHA install', () async {
-    final directory = await Directory.systemTemp.createTemp('planerka_native_model_');
-    try {
-      final content = utf8.encode('tiny model');
-      final modelStore = ModelStore(LocalModelFileStore(directory));
-      final nativePart = File('${directory.path}/${Qwen3ModelManifest.testFixture.fileName}.part');
-      await nativePart.writeAsBytes(content);
-      await modelStore.files.installDownloaded(nativePart.path, Qwen3ModelManifest.testFixture.fileName);
-      expect(await modelStore.installPartial(Qwen3ModelManifest.testFixture), isTrue);
-      expect(await modelStore.verifiedModel(Qwen3ModelManifest.testFixture), isNotNull);
-    } finally {
-      await directory.delete(recursive: true);
-    }
-  });
+  test(
+    'native download in the app model directory survives SHA install',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'planerka_native_model_',
+      );
+      try {
+        final content = utf8.encode('tiny model');
+        final modelStore = ModelStore(LocalModelFileStore(directory));
+        final nativePart = File(
+          '${directory.path}/${Qwen3ModelManifest.testFixture.fileName}.part',
+        );
+        await nativePart.writeAsBytes(content);
+        await modelStore.files.installDownloaded(
+          nativePart.path,
+          Qwen3ModelManifest.testFixture.fileName,
+        );
+        expect(
+          await modelStore.installPartial(Qwen3ModelManifest.testFixture),
+          isTrue,
+        );
+        expect(
+          await modelStore.verifiedModel(Qwen3ModelManifest.testFixture),
+          isNotNull,
+        );
+      } finally {
+        await directory.delete(recursive: true);
+      }
+    },
+  );
 
   test(
     'partial and native files cannot install before exact size and SHA',

@@ -14,9 +14,16 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class FakeBackupFiles implements BackupFilePort {
   String? picked;
   String? saved;
+  String? image;
 
   @override
   Future<String?> pick() async => picked;
+
+  @override
+  Future<String?> pickImage() async => image;
+
+  @override
+  Future<String?> saveBackground(String sourcePath) async => sourcePath;
 
   @override
   Future<bool> save(String json) async {

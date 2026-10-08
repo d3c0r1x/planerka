@@ -31,7 +31,7 @@ void main() {
     await directory.delete(recursive: true);
   });
 
-  test('database creates local game state tables in schema v4', () async {
+  test('database creates local game state tables and latest schema', () async {
     final tables = await database.database.rawQuery(
       "SELECT name FROM sqlite_master WHERE type = 'table'",
     );
@@ -42,7 +42,7 @@ void main() {
     expect(names, contains('game_achievements'));
     expect(names, contains('custom_rewards'));
     expect(await database.database.rawQuery('PRAGMA user_version'), [
-      {'user_version': 4},
+      {'user_version': 6},
     ]);
   });
 
@@ -63,6 +63,9 @@ void main() {
     ]) {
       await database.database.execute('DROP TABLE $table');
     }
+    await database.database.execute('DROP TABLE task_goal_links');
+    await database.database.execute('DROP INDEX tasks_parent_idx');
+    await database.database.execute('ALTER TABLE tasks DROP COLUMN parent_task_id');
     await database.database.execute('PRAGMA user_version = 3');
     await database.close();
 

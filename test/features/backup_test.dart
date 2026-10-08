@@ -5,11 +5,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:planerka/core/app_database.dart';
 import 'package:planerka/features/backup/backup_service.dart';
+import 'package:planerka/features/backup/backup_file_port.dart';
 import 'package:planerka/features/inbox/inbox_repository.dart';
 import 'package:planerka/features/wellbeing/wellbeing_repository.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(sqfliteFfiInit);
   late Directory directory;
   late AppDatabase source;
@@ -92,6 +94,18 @@ void main() {
     expect(await destination.database.query('timer_settings'), hasLength(1));
   });
 
+  test('selected background is copied to durable app storage', () async {
+    final sourceFile = File(p.join(directory.path, 'picked.png'));
+    await sourceFile.writeAsBytes([1, 2, 3, 4]);
+    final saved = await const NativeBackupFilePort().saveBackground(
+      sourceFile.path,
+      directoryProvider: () async => directory,
+    );
+    expect(saved, isNotNull);
+    expect(await File(saved!).readAsBytes(), [1, 2, 3, 4]);
+    expect(saved, contains('backgrounds'));
+  });
+
   test('invalid backup is rejected before changing data', () async {
     await InboxRepository(source).add('Останется');
     await expectLater(
@@ -114,7 +128,7 @@ void main() {
     final empty = jsonEncode({
       'version': 1,
       'tables': {
-        for (final table in BackupService.userTables) table: <Object>[],
+        for (final table in BackupService.legacyUserTables) table: <Object>[],
       },
     });
     await backup.importJson(empty, mode: ImportMode.replace);
@@ -139,7 +153,7 @@ void main() {
       final empty = jsonEncode({
         'version': 1,
         'tables': {
-          for (final table in BackupService.userTables) table: <Object>[],
+          for (final table in BackupService.legacyUserTables) table: <Object>[],
         },
       });
       await backup.importJson(empty, mode: ImportMode.replace);

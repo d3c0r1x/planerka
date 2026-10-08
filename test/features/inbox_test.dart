@@ -77,6 +77,10 @@ void main() {
       rows.singleWhere((row) => row['id'] == project.id)['project_id'],
       projects.single['id'],
     );
+    expect(
+      rows.singleWhere((row) => row['id'] == quick.id)['scheduled_date'],
+      '2026-10-07',
+    );
   });
 
   test('entry persists across database reopen', () async {

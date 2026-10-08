@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:sqflite_common/sqlite_api.dart';
 
 import 'backup_file_port.dart';
 import 'backup_service.dart';
@@ -16,6 +17,47 @@ class BackupScreen extends StatefulWidget {
 
 class _BackupScreenState extends State<BackupScreen> {
   bool _busy = false;
+  String? _backgroundPath;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.service.database.database
+        .query(
+          'app_metadata',
+          columns: ['value'],
+          where: 'key = ?',
+          whereArgs: ['custom_background_path'],
+          limit: 1,
+        )
+        .then((rows) {
+          if (mounted && rows.isNotEmpty) {
+            setState(() => _backgroundPath = rows.single['value'] as String);
+          }
+        });
+  }
+
+  Future<void> _chooseBackground() async {
+    final path = await widget.files.pickImage();
+    if (path == null || !mounted) return;
+    final savedPath = await widget.files.saveBackground(path);
+    if (savedPath == null || !mounted) return;
+    await widget.service.database.database.insert('app_metadata', {
+      'key': 'custom_background_path',
+      'value': savedPath,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    setState(() => _backgroundPath = savedPath);
+    _message('Фон сохранён на устройстве');
+  }
+
+  Future<void> _resetBackground() async {
+    await widget.service.database.database.delete(
+      'app_metadata',
+      where: 'key = ?',
+      whereArgs: ['custom_background_path'],
+    );
+    if (mounted) setState(() => _backgroundPath = null);
+  }
 
   void _message(String text) {
     if (!mounted) return;
@@ -75,7 +117,7 @@ class _BackupScreenState extends State<BackupScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Резервная копия')),
+    appBar: AppBar(title: const Text('Настройки и резервная копия')),
     body: ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -83,7 +125,7 @@ class _BackupScreenState extends State<BackupScreen> {
           child: Padding(
             padding: EdgeInsets.all(16),
             child: Text(
-              'Копия содержит ваши задачи, цели, привычки, записи дневника и статистику. Выберите место хранения сами.',
+              'Резервная копия содержит задачи, цели, привычки, дневник и статистику. Фон хранится только на устройстве.',
             ),
           ),
         ),
@@ -97,6 +139,33 @@ class _BackupScreenState extends State<BackupScreen> {
           onPressed: _busy ? null : _import,
           icon: const Icon(Icons.file_open_rounded),
           label: const Text('Восстановить из файла'),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.wallpaper_rounded),
+                title: const Text('Фон приложения'),
+                subtitle: Text(
+                  _backgroundPath == null
+                      ? 'Чёрная тема'
+                      : 'Пользовательское изображение сохранено',
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.add_photo_alternate_rounded),
+                title: const Text('Выбрать изображение'),
+                onTap: _chooseBackground,
+              ),
+              if (_backgroundPath != null)
+                ListTile(
+                  leading: const Icon(Icons.restart_alt_rounded),
+                  title: const Text('Вернуть чёрный фон'),
+                  onTap: _resetBackground,
+                ),
+            ],
+          ),
         ),
         if (_busy) const LinearProgressIndicator(),
       ],
