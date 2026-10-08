@@ -145,7 +145,11 @@ void main() {
     final gesture = await tester.startGesture(
       Offset(page.right - 8, page.center.dy),
     );
-    await gesture.moveBy(Offset(-page.width * .7, 0));
+    // Continue moving after the nested vertical scroll resolves its gesture.
+    for (var i = 0; i < 4; i++) {
+      await gesture.moveBy(Offset(-page.width * .2, 0));
+      await tester.pump(const Duration(milliseconds: 40));
+    }
     await gesture.up();
     await tester.pumpAndSettle();
     expect(

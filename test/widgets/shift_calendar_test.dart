@@ -232,6 +232,54 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('compact month marks tasks deadlines and shifts at 360dp', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final inbox = InboxRepository(database);
+    final task = await inbox.add('Проверить план');
+    await inbox.triage(
+      task.id,
+      TaskDisposition.planned,
+      dueAt: DateTime(2026, 10, 8, 18),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CalendarScreen(
+          repository: PlanningRepository(database),
+          shifts: shifts,
+          initialDate: anchor,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('calendar-month-grid')), findsOneWidget);
+    expect(
+      find.byKey(const Key('calendar-task-marker-2026-10-8')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('calendar-deadline-marker-2026-10-8')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('calendar-shift-marker-2026-10-8')),
+      findsOneWidget,
+    );
+    expect(find.text('1 задача · 1 дедлайн'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byKey(const Key('calendar-day-2026-10-9')));
+    await tester.pumpAndSettle();
+    expect(find.text('0 задач · 0 дедлайнов'), findsOneWidget);
+    await tester.tap(find.byTooltip('Следующий месяц'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('calendar-day-2026-11-1')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 ShiftTeam _team(String id, int offset, {bool attends = true}) => ShiftTeam(

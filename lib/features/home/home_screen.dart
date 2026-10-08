@@ -52,6 +52,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _input = TextEditingController();
   bool _saving = false;
+  int _revision = 0;
 
   @override
   void dispose() {
@@ -81,8 +82,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final colors = Theme.of(context).colorScheme;
     final date = MaterialLocalizations.of(context)
         .formatFullDate(DateTime.now());
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return ListView(
+      key: const Key('home-scroll'),
+      padding: const EdgeInsets.only(bottom: 28),
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
@@ -115,7 +117,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 12),
-              _DayProgressStrip(planning: widget.planning),
+              _DayProgressStrip(
+                key: ValueKey('day-counts-$_revision-${widget.isActive}'),
+                planning: widget.planning,
+              ),
               const SizedBox(height: 11),
               _PrimaryGoalCard(
                 planning: widget.planning,
@@ -167,12 +172,12 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
-        Expanded(
-          child: TodayScreen(
-            key: ValueKey('today-screen-${widget.isActive}'),
-            repository: widget.planning,
-            onReviewMissed: widget.onReviewMissed,
-          ),
+        TodayScreen(
+          key: ValueKey('today-screen-${widget.isActive}'),
+          repository: widget.planning,
+          onReviewMissed: widget.onReviewMissed,
+          embedded: true,
+          onChanged: () => setState(() => _revision++),
         ),
       ],
     );
@@ -515,53 +520,85 @@ class _QuickInboxInput extends StatelessWidget {
   }
 }
 
-class _DayProgressStrip extends StatelessWidget {
-  const _DayProgressStrip({required this.planning});
+class _DayProgressStrip extends StatefulWidget {
+  const _DayProgressStrip({super.key, required this.planning});
   final PlanningRepository planning;
+
+  @override
+  State<_DayProgressStrip> createState() => _DayProgressStripState();
+}
+
+class _DayProgressStripState extends State<_DayProgressStrip> {
+  late final Future<({int completed, int total, int overdue})> _counts =
+      _load();
+
+  Future<({int completed, int total, int overdue})> _load() async {
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day).toUtc();
+    final end = DateTime(now.year, now.month, now.day + 1).toUtc();
+    final completedRows = await widget.planning.database.database.rawQuery(
+      "SELECT COUNT(*) AS count FROM tasks WHERE status = 'completed' "
+      'AND completed_at >= ? AND completed_at < ?',
+      [start.toIso8601String(), end.toIso8601String()],
+    );
+    final completed = (completedRows.single['count'] as num).toInt();
+    final today = await widget.planning.listForDay(now);
+    final overdue = await widget.planning.listOverdue(now);
+    return (
+      completed: completed,
+      total: completed + today.length,
+      overdue: overdue.length,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return FutureBuilder<List<dynamic>>(
-      future: Future.wait([
-        planning.listForDay(DateTime.now()),
-        planning.listOverdue(DateTime.now()),
-        planning.listUnscheduled(),
-      ]),
+    return FutureBuilder<({int completed, int total, int overdue})>(
+      future: _counts,
       builder: (context, snapshot) {
-        final today = snapshot.data?.first ?? const [];
-        final overdue = snapshot.data?[1] ?? const [];
-        final backlog = snapshot.data?.last ?? const [];
-        final planned = today.length + backlog.length;
-        final progress = planned == 0 ? 0.0 : today.length / planned;
-        return Row(
+        if (snapshot.hasError) {
+          return const Text('Не удалось обновить итоги дня');
+        }
+        if (!snapshot.hasData) {
+          return const SizedBox(
+            height: 30,
+            child: Text('Загружаем итоги дня…'),
+          );
+        }
+        final completed = snapshot.data?.completed ?? 0;
+        final total = snapshot.data?.total ?? 0;
+        final overdue = snapshot.data?.overdue ?? 0;
+        final progress = total == 0 ? 0.0 : completed / total;
+        return Column(
           key: const Key('home-day-progress'),
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: LinearProgressIndicator(
-                  minHeight: 7,
-                  value: progress,
-                  backgroundColor: colors.surfaceContainerHighest,
-                  valueColor: AlwaysStoppedAnimation(colors.tertiary),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '$completed из $total выполнено',
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
                 ),
+                if (overdue > 0)
+                  Text(
+                    '$overdue просрочено',
+                    style: const TextStyle(color: AppTheme.coral, fontSize: 11),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: LinearProgressIndicator(
+                minHeight: 7,
+                value: progress,
+                backgroundColor: colors.surfaceContainerHighest,
+                valueColor: AlwaysStoppedAnimation(colors.tertiary),
               ),
             ),
-            const SizedBox(width: 9),
-            ProgressPill(
-              icon: Icons.check_circle_rounded,
-              label: '${today.length} сегодня',
-              color: colors.tertiary,
-            ),
-            if (overdue.isNotEmpty) ...[
-              const SizedBox(width: 6),
-              ProgressPill(
-                icon: Icons.alarm_rounded,
-                label: '${overdue.length} срок',
-                color: AppTheme.coral,
-              ),
-            ],
           ],
         );
       },

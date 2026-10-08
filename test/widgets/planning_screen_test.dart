@@ -73,7 +73,8 @@ void main() {
     await tester.pumpWidget(PlanerkaApp(database: database));
     await tester.tap(find.byTooltip('Календарь'));
     await tester.pumpAndSettle();
-    expect(find.byType(CalendarDatePicker), findsOneWidget);
+    expect(find.byKey(const Key('calendar-month-grid')), findsOneWidget);
+    expect(find.byKey(const Key('calendar-day-summary')), findsOneWidget);
   });
 
   testWidgets('project screen adds a concrete action', (tester) async {

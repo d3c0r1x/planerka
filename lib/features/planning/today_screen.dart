@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/app_theme.dart';
 import '../../core/models.dart';
 import 'planning_repository.dart';
 
@@ -9,11 +10,15 @@ class TodayScreen extends StatefulWidget {
     required this.repository,
     this.interactive = true,
     this.onReviewMissed,
+    this.embedded = false,
+    this.onChanged,
   });
 
   final PlanningRepository repository;
   final bool interactive;
   final Future<void> Function(String taskId)? onReviewMissed;
+  final bool embedded;
+  final VoidCallback? onChanged;
 
   @override
   State<TodayScreen> createState() => _TodayScreenState();
@@ -47,6 +52,7 @@ class _TodayScreenState extends State<TodayScreen> {
     setState(() {
       _plan = _load();
     });
+    widget.onChanged?.call();
   }
 
   Future<void> _selectToday(TaskEntry task) async {
@@ -174,60 +180,111 @@ class _TodayScreenState extends State<TodayScreen> {
     bool backlog = false,
     bool missed = false,
   }) => Card(
-    child: ListTile(
-      title: Text(task.title),
-      subtitle: task.dueAt == null && task.scheduledAt == null
-          ? null
-          : Text(
-              [
-                if (task.scheduledAt != null)
-                  'План: ${MaterialLocalizations.of(context).formatMediumDate(task.scheduledAt!.toLocal())}, ${TimeOfDay.fromDateTime(task.scheduledAt!.toLocal()).format(context)} · ${task.estimatedMinutes ?? 30} мин',
-                if (task.dueAt != null)
-                  'Дедлайн: ${MaterialLocalizations.of(context).formatMediumDate(task.dueAt!.toLocal())}',
-              ].join('\n'),
-            ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
+    key: ValueKey('today-task-${task.id}'),
+    margin: const EdgeInsets.symmetric(vertical: 5),
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(14, 13, 4, 13),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (missed)
-            IconButton(
-              tooltip: 'Разобрать пропуск',
-              onPressed: widget.interactive ? () => _reviewMissed(task) : null,
-              icon: const Icon(Icons.psychology_alt_rounded),
+          Container(
+            width: 3,
+            height: 36,
+            decoration: BoxDecoration(
+              color: missed
+                  ? AppTheme.coral
+                  : backlog
+                  ? AppTheme.seed
+                  : AppTheme.mint,
+              borderRadius: BorderRadius.circular(3),
             ),
-          if (backlog)
-            IconButton(
-              tooltip: 'На сегодня',
-              onPressed: widget.interactive ? () => _selectToday(task) : null,
-              icon: const Icon(Icons.today_rounded),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(task.title, style: Theme.of(context).textTheme.titleSmall),
+                if (task.dueAt != null || task.scheduledAt != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    [
+                      if (task.scheduledAt != null)
+                        'План: ${MaterialLocalizations.of(context).formatMediumDate(task.scheduledAt!.toLocal())}, ${TimeOfDay.fromDateTime(task.scheduledAt!.toLocal()).format(context)} · ${task.estimatedMinutes ?? 30} мин',
+                      if (task.dueAt != null)
+                        'Дедлайн: ${MaterialLocalizations.of(context).formatMediumDate(task.dueAt!.toLocal())}',
+                    ].join('\n'),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ],
             ),
-          IconButton(
-            tooltip: 'Напомнить',
-            onPressed: widget.interactive ? () => _setReminder(task) : null,
-            icon: const Icon(Icons.notifications_active_rounded),
           ),
-          IconButton(
-            tooltip: 'Запланировать время',
-            onPressed: widget.interactive ? () => _scheduleBlock(task) : null,
-            icon: const Icon(Icons.schedule_rounded),
-          ),
-          if (task.scheduledAt != null)
-            IconButton(
-              tooltip: 'Убрать время',
-              onPressed: widget.interactive
-                  ? () => _clearScheduleBlock(task)
-                  : null,
-              icon: const Icon(Icons.event_busy_rounded),
-            ),
-          IconButton(
-            tooltip: 'Назначить срок',
-            onPressed: widget.interactive ? () => _schedule(task) : null,
-            icon: const Icon(Icons.event_rounded),
-          ),
-          IconButton(
-            tooltip: 'Завершить',
-            onPressed: widget.interactive ? () => _complete(task) : null,
-            icon: const Icon(Icons.check_circle_outline_rounded),
+          const SizedBox(width: 4),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton.filledTonal(
+                tooltip: backlog ? 'На сегодня' : 'Завершить',
+                onPressed: widget.interactive
+                    ? () => backlog ? _selectToday(task) : _complete(task)
+                    : null,
+                icon: Icon(
+                  backlog ? Icons.add_rounded : Icons.check_rounded,
+                  size: 19,
+                ),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'Действия задачи',
+                enabled: widget.interactive,
+                icon: const Icon(Icons.more_horiz_rounded, size: 20),
+                onSelected: (value) {
+                  switch (value) {
+                    case 'review':
+                      _reviewMissed(task);
+                    case 'reminder':
+                      _setReminder(task);
+                    case 'time':
+                      _scheduleBlock(task);
+                    case 'clear':
+                      _clearScheduleBlock(task);
+                    case 'deadline':
+                      _schedule(task);
+                    case 'complete':
+                      _complete(task);
+                  }
+                },
+                itemBuilder: (_) => [
+                  if (missed)
+                    const PopupMenuItem(
+                      value: 'review',
+                      child: Text('Разобрать пропуск'),
+                    ),
+                  const PopupMenuItem(
+                    value: 'reminder',
+                    child: Text('Напомнить'),
+                  ),
+                  const PopupMenuItem(
+                    value: 'time',
+                    child: Text('Запланировать время'),
+                  ),
+                  if (task.scheduledAt != null)
+                    const PopupMenuItem(
+                      value: 'clear',
+                      child: Text('Убрать время'),
+                    ),
+                  const PopupMenuItem(
+                    value: 'deadline',
+                    child: Text('Назначить срок'),
+                  ),
+                  if (backlog)
+                    const PopupMenuItem(
+                      value: 'complete',
+                      child: Text('Завершить'),
+                    ),
+                ],
+              ),
+            ],
           ),
         ],
       ),
@@ -248,37 +305,39 @@ class _TodayScreenState extends State<TodayScreen> {
           return const Center(child: CircularProgressIndicator());
         }
         final plan = snapshot.data!;
-        if (plan.today.isEmpty &&
-            plan.overdue.isEmpty &&
-            plan.unscheduled.isEmpty) {
-          return const Center(child: Text('Ваш день начинается здесь'));
-        }
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            if (plan.overdue.isNotEmpty) ...[
-              Text('Просрочено', style: Theme.of(context).textTheme.titleLarge),
-              ...plan.overdue.map((task) => _taskTile(task, missed: true)),
-              const SizedBox(height: 16),
-            ],
-            Text(
-              'Сегодня',
-              key: const Key('home-today-section'),
-              style: Theme.of(context).textTheme.titleLarge,
+        final children = <Widget>[
+          Text(
+            'Сегодня',
+            key: const Key('home-today-section'),
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          if (plan.today.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Text('На сегодня пока ничего не выбрано.'),
             ),
-            if (plan.today.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text('На сегодня пока ничего не выбрано.'),
-              ),
-            ...plan.today.map(_taskTile),
-            if (plan.unscheduled.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Text('К выбору', style: Theme.of(context).textTheme.titleLarge),
-              ...plan.unscheduled.map((task) => _taskTile(task, backlog: true)),
-            ],
+          ...plan.today.map(_taskTile),
+          if (plan.overdue.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text('Просрочено', style: Theme.of(context).textTheme.titleLarge),
+            ...plan.overdue.map((task) => _taskTile(task, missed: true)),
           ],
-        );
+          if (plan.unscheduled.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text('К выбору', style: Theme.of(context).textTheme.titleLarge),
+            ...plan.unscheduled.map((task) => _taskTile(task, backlog: true)),
+          ],
+        ];
+        if (widget.embedded) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: children,
+            ),
+          );
+        }
+        return ListView(padding: const EdgeInsets.all(16), children: children);
       },
     );
   }

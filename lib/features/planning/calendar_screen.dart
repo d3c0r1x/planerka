@@ -26,6 +26,8 @@ class CalendarScreen extends StatefulWidget {
 class _CalendarScreenState extends State<CalendarScreen> {
   late DateTime _selected;
   late Future<List<TaskEntry>> _tasks;
+  late DateTime _month;
+  late Future<_MonthData> _monthData;
 
   @override
   void initState() {
@@ -33,6 +35,49 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final initial = widget.initialDate ?? DateTime.now();
     _selected = DateTime(initial.year, initial.month, initial.day);
     _tasks = widget.repository.listForDay(_selected);
+    _month = DateTime(_selected.year, _selected.month);
+    _monthData = _loadMonth();
+  }
+
+  Future<_MonthData> _loadMonth() async {
+    final month = _month;
+    final end = DateTime(month.year, month.month + 1);
+    final days = end.subtract(const Duration(days: 1)).day;
+    final taskFuture = Future.wait([
+      for (var day = 1; day <= days; day++)
+        widget.repository.listForDay(DateTime(month.year, month.month, day)),
+    ]);
+    final shiftFuture = widget.shifts.calendar(month, end);
+    final tasks = await taskFuture;
+    final shifts = await shiftFuture;
+    return _MonthData(
+      tasks: {for (var day = 1; day <= days; day++) day: tasks[day - 1]},
+      shiftDays: {
+        for (final shift in shifts)
+          if (!shift.cancelled && shift.workStart != null) shift.date.day,
+      },
+    );
+  }
+
+  void _changeMonth(int delta) => setState(() {
+    _month = DateTime(_month.year, _month.month + delta);
+    _monthData = _loadMonth();
+  });
+
+  Future<void> _pickDate() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _selected,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100, 12, 31),
+    );
+    if (date == null || !mounted) return;
+    setState(() {
+      _selected = date;
+      _tasks = widget.repository.listForDay(date);
+      _month = DateTime(date.year, date.month);
+      _monthData = _loadMonth();
+    });
   }
 
   Future<void> _openShiftSetup() async {
@@ -42,7 +87,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         builder: (_) => ShiftSetupScreen(repository: widget.shifts),
       ),
     );
-    if (saved == true && mounted) setState(() {});
+    if (saved == true && mounted) setState(() => _monthData = _loadMonth());
   }
 
   @override
@@ -63,21 +108,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
         children: [
           _selectedDayCard(context),
-          Card(
-            margin: const EdgeInsets.only(top: 12, bottom: 6),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: CalendarDatePicker(
-                initialDate: _selected,
-                firstDate: DateTime(2020),
-                lastDate: DateTime(2100),
-                onDateChanged: (date) => setState(() {
-                  _selected = date;
-                  _tasks = widget.repository.listForDay(date);
-                }),
-              ),
-            ),
-          ),
+          _monthGrid(context),
           ShiftCalendarSection(
             key: ValueKey(
               'calendar-shifts-${_selected.year}-${_selected.month}-${_selected.day}',
@@ -192,16 +223,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 size: 19,
               ),
               const SizedBox(width: 8),
-              Text(
-                'ТВОЙ КАЛЕНДАРЬ',
-                style: TextStyle(
-                  color: AppTheme.mint.withValues(alpha: .95),
-                  fontSize: 11,
-                  letterSpacing: 1.2,
-                  fontWeight: FontWeight.w800,
+              Expanded(
+                child: Text(
+                  'ТВОЙ КАЛЕНДАРЬ',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: AppTheme.mint.withValues(alpha: .95),
+                    fontSize: 11,
+                    letterSpacing: 1.2,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 6),
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
@@ -235,46 +270,304 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     ?.copyWith(color: Colors.white, fontSize: 46, height: .95),
               ),
               const SizedBox(width: 12),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 3),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      weekday,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        weekday,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
                       ),
-                    ),
-                    Text(
-                      dateLabel,
-                      style: Theme.of(context).textTheme.bodySmall
-                          ?.copyWith(color: scheme.onSurfaceVariant),
-                    ),
-                  ],
+                      Text(
+                        dateLabel,
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: scheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 13),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _legendChip(Icons.groups_rounded, 'Смены', AppTheme.mint),
-              _legendChip(Icons.task_alt_rounded, 'Задачи', AppTheme.seed),
-              _legendChip(
-                Icons.notifications_active_rounded,
-                'Дедлайны',
-                AppTheme.coral,
-              ),
-            ],
+          FutureBuilder<List<TaskEntry>>(
+            future: _tasks,
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return const SizedBox(height: 16);
+              final tasks = snapshot.data!;
+              final deadlines = tasks
+                  .where(
+                    (task) =>
+                        DateUtils.isSameDay(task.dueAt?.toLocal(), _selected),
+                  )
+                  .length;
+              return Text(
+                '${_count(tasks.length, 'задача', 'задачи', 'задач')} · ${_count(deadlines, 'дедлайн', 'дедлайна', 'дедлайнов')}',
+                key: const Key('calendar-day-summary'),
+                style: Theme.of(context).textTheme.labelLarge
+                    ?.copyWith(color: AppTheme.mint),
+              );
+            },
           ),
         ],
       ),
     );
   }
+
+  String _count(int count, String one, String few, String many) {
+    final last = count % 10;
+    final teen = count % 100 >= 11 && count % 100 <= 14;
+    return '$count ${teen
+        ? many
+        : last == 1
+        ? one
+        : last >= 2 && last <= 4
+        ? few
+        : many}';
+  }
+
+  Widget _monthGrid(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final length = DateTime(_month.year, _month.month + 1, 0).day;
+    final offset = _month.weekday - 1;
+    final weeks = ((length + offset) / 7).ceil();
+    return Card(
+      key: const Key('calendar-month-grid'),
+      margin: const EdgeInsets.only(top: 12, bottom: 6),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 6, 10, 12),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  tooltip: 'Предыдущий месяц',
+                  onPressed: _month.year == 2020 && _month.month == 1
+                      ? null
+                      : () => _changeMonth(-1),
+                  icon: const Icon(Icons.chevron_left_rounded),
+                ),
+                Expanded(
+                  child: TextButton(
+                    onPressed: _pickDate,
+                    child: Text(
+                      MaterialLocalizations.of(context).formatMonthYear(_month),
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Следующий месяц',
+                  onPressed: _month.year == 2100 && _month.month == 12
+                      ? null
+                      : () => _changeMonth(1),
+                  icon: const Icon(Icons.chevron_right_rounded),
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                for (final day in const [
+                  'ПН',
+                  'ВТ',
+                  'СР',
+                  'ЧТ',
+                  'ПТ',
+                  'СБ',
+                  'ВС',
+                ])
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        day,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            FutureBuilder<_MonthData>(
+              future: _monthData,
+              builder: (context, snapshot) => Column(
+                children: [
+                  for (var week = 0; week < weeks; week++)
+                    Row(
+                      children: [
+                        for (var weekday = 0; weekday < 7; weekday++)
+                          Expanded(
+                            child: Builder(
+                              builder: (context) {
+                                final day = week * 7 + weekday - offset + 1;
+                                if (day < 1 || day > length) {
+                                  return const SizedBox(height: 48);
+                                }
+                                final date = DateTime(
+                                  _month.year,
+                                  _month.month,
+                                  day,
+                                );
+                                final selected = DateUtils.isSameDay(
+                                  date,
+                                  _selected,
+                                );
+                                final today = DateUtils.isSameDay(
+                                  date,
+                                  DateTime.now(),
+                                );
+                                final data =
+                                    snapshot.connectionState ==
+                                        ConnectionState.done
+                                    ? snapshot.data
+                                    : null;
+                                final tasks =
+                                    data?.tasks[day] ?? const <TaskEntry>[];
+                                final deadline = tasks.any(
+                                  (task) => DateUtils.isSameDay(
+                                    task.dueAt?.toLocal(),
+                                    date,
+                                  ),
+                                );
+                                final shift =
+                                    data?.shiftDays.contains(day) ?? false;
+                                final suffix =
+                                    '${date.year}-${date.month}-${date.day}';
+                                return Semantics(
+                                  label:
+                                      '${MaterialLocalizations.of(context).formatFullDate(date)}, ${tasks.length} задач${deadline ? ', есть дедлайн' : ''}${shift ? ', есть смена' : ''}',
+                                  selected: selected,
+                                  button: true,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(2),
+                                    child: Material(
+                                      color: selected
+                                          ? scheme.primary
+                                          : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(13),
+                                      child: InkWell(
+                                        key: ValueKey('calendar-day-$suffix'),
+                                        borderRadius: BorderRadius.circular(13),
+                                        onTap: () => setState(() {
+                                          _selected = date;
+                                          _tasks = widget.repository.listForDay(
+                                            date,
+                                          );
+                                        }),
+                                        child: Container(
+                                          height: 44,
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(
+                                              13,
+                                            ),
+                                            border: today && !selected
+                                                ? Border.all(
+                                                    color: scheme.primary,
+                                                  )
+                                                : null,
+                                          ),
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Text(
+                                                '$day',
+                                                style: TextStyle(
+                                                  color: selected
+                                                      ? scheme.onPrimary
+                                                      : scheme.onSurface,
+                                                  fontWeight: selected || today
+                                                      ? FontWeight.w800
+                                                      : FontWeight.w500,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              SizedBox(
+                                                height: 4,
+                                                child: Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  children: [
+                                                    if (tasks.isNotEmpty)
+                                                      _dot(
+                                                        'calendar-task-marker-$suffix',
+                                                        selected
+                                                            ? scheme.onPrimary
+                                                            : AppTheme.seed,
+                                                      ),
+                                                    if (deadline)
+                                                      _dot(
+                                                        'calendar-deadline-marker-$suffix',
+                                                        AppTheme.coral,
+                                                      ),
+                                                    if (shift)
+                                                      _dot(
+                                                        'calendar-shift-marker-$suffix',
+                                                        AppTheme.mint,
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 12,
+              runSpacing: 6,
+              children: [
+                _markerLegend('Задачи', AppTheme.seed),
+                _markerLegend('Дедлайны', AppTheme.coral),
+                _markerLegend('Смены', AppTheme.mint),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _dot(String key, Color color) => Container(
+    key: ValueKey(key),
+    width: 4,
+    height: 4,
+    margin: const EdgeInsets.symmetric(horizontal: 1),
+    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+  );
+
+  Widget _markerLegend(String title, Color color) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 5,
+        height: 5,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      ),
+      const SizedBox(width: 5),
+      Text(title, style: const TextStyle(fontSize: 10)),
+    ],
+  );
 
   Widget _legendChip(IconData icon, String label, Color color) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
@@ -288,12 +581,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
       children: [
         Icon(icon, size: 14, color: color),
         const SizedBox(width: 5),
-        Text(
-          label,
-          style: TextStyle(
-            color: color,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
+        Flexible(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ],
@@ -381,4 +676,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
     'Суббота',
     'Воскресенье',
   ][value - 1];
+}
+
+class _MonthData {
+  const _MonthData({required this.tasks, required this.shiftDays});
+  final Map<int, List<TaskEntry>> tasks;
+  final Set<int> shiftDays;
 }
