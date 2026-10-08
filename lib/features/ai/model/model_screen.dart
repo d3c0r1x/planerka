@@ -152,6 +152,22 @@ class _ModelScreenState extends State<ModelScreen> {
                         const Text(
                           'Работает на телефоне. Задачи и дневник остаются на устройстве.',
                         ),
+                        if (!ready) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            key: const ValueKey('model-not-installed-banner'),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.tertiaryContainer,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: const Row(children: [
+                              Icon(Icons.cloud_download_rounded),
+                              SizedBox(width: 10),
+                              Expanded(child: Text('Локальная модель ещё не установлена. Скачайте её, чтобы включить ИИ.')),
+                            ]),
+                          ),
+                        ],
                         const SizedBox(height: 18),
                         const ListTile(
                           contentPadding: EdgeInsets.zero,
@@ -174,6 +190,8 @@ class _ModelScreenState extends State<ModelScreen> {
                             _state.status == ModelDownloadStatus.paused &&
                                 _state.receivedBytes > 0) ...[
                           LinearProgressIndicator(value: _state.progress),
+                          const SizedBox(height: 8),
+                          Text('Загрузка продолжается, даже если закрыть этот экран.'),
                           const SizedBox(height: 8),
                           Text(
                             '${(_state.receivedBytes / 1000000).toStringAsFixed(0)} / ${(_state.totalBytes / 1000000).toStringAsFixed(0)} МБ',

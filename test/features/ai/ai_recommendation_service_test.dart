@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:planerka/core/app_database.dart';
 import 'package:planerka/features/ai/model/local_ai_engine.dart';
 import 'package:planerka/features/ai/planning/ai_recommendation_service.dart';
+import 'package:planerka/features/planning/planning_repository.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
@@ -70,6 +71,34 @@ void main() {
     final withoutDiary = await service.buildContext();
     expect(withoutDiary.diary, isEmpty);
     expect(await service.diaryEnabled(), isFalse);
+  });
+
+  test('validates local goal steps and adds them only when explicitly applied', () async {
+    generator.response = jsonEncode({'steps': ['Открыть книгу', 'Читать 10 минут', 'Записать вывод']});
+    final steps = await service.generateGoalSteps('Читать регулярно');
+    expect(steps, hasLength(3));
+    expect(await database.database.query('projects'), isEmpty);
+    await service.applyGoalSteps('g1', steps.take(2).toList());
+    final projects = await database.database.query('projects', where: 'goal_id = ?', whereArgs: ['g1']);
+    expect(projects, hasLength(1));
+    final tasks = await database.database.query('tasks', where: 'project_id = ?', whereArgs: [projects.single['id']]);
+    expect(tasks.map((row) => row['title']), ['Открыть книгу', 'Читать 10 минут']);
+  });
+
+  test('primary goal progress derives from linked tasks, not manual progress', () async {
+    final projectId = await PlanningRepository(database).ensureGoalProject('g1', 'Читать регулярно');
+    await database.database.insert('tasks', {..._task('g-task-1', 'Первый шаг'), 'project_id': projectId});
+    await database.database.insert('tasks', {..._task('g-task-2', 'Второй шаг'), 'project_id': projectId, 'status': 'completed'});
+    final counts = await PlanningRepository(database).goalTaskCounts('g1');
+    expect(counts.completed, 1);
+    expect(counts.active, 1);
+    await PlanningRepository(database).setPrimaryGoal('g1');
+    expect((await PlanningRepository(database).primaryGoal())?.id, 'g1');
+  });
+
+  test('rejects malformed goal steps', () {
+    expect(() => GoalStepValidator().parse('{"steps":["один"]}'), throwsFormatException);
+    expect(() => GoalStepValidator().parse('{"steps":["а","а","б"]}'), throwsFormatException);
   });
 
   test('generates a local preview without changing task rows', () async {

@@ -22,6 +22,7 @@ void main() {
     expect(find.text('Qwen3 · 0.6B'), findsOneWidget);
     expect(find.text('484 МБ'), findsOneWidget);
     expect(find.text('Скачать модель'), findsOneWidget);
+    expect(find.byKey(const ValueKey('model-not-installed-banner')), findsOneWidget);
   });
 }
 

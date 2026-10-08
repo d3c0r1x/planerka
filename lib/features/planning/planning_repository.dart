@@ -1,4 +1,5 @@
 import 'package:uuid/uuid.dart';
+import 'package:sqflite_common/sqlite_api.dart';
 
 import '../../core/app_database.dart';
 import '../../core/models.dart';
@@ -188,5 +189,121 @@ class PlanningRepository {
           ),
         )
         .toList();
+  }
+
+  Future<void> setPrimaryGoal(String? goalId) async {
+    if (goalId != null) {
+      final exists = await database.database.query(
+        'goals',
+        columns: ['id'],
+        where: 'id = ?',
+        whereArgs: [goalId],
+        limit: 1,
+      );
+      if (exists.isEmpty) throw StateError('Цель больше не существует');
+    }
+    await database.database.insert(
+      'app_metadata',
+      {'key': 'primary_goal_id', 'value': goalId ?? ''},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Goal?> primaryGoal() async {
+    final setting = await database.database.query(
+      'app_metadata',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: ['primary_goal_id'],
+      limit: 1,
+    );
+    if (setting.isEmpty || (setting.single['value'] as String).isEmpty) {
+      return null;
+    }
+    final goals = await listGoals();
+    for (final goal in goals) {
+      if (goal.id == setting.single['value']) return goal;
+    }
+    return null;
+  }
+
+  Future<({int completed, int active})> goalTaskCounts(String goalId) async {
+    final rows = await database.database.rawQuery(
+      '''
+      SELECT
+        SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) AS completed,
+        SUM(CASE WHEN t.status IN ('planned', 'quick') THEN 1 ELSE 0 END) AS active
+      FROM projects p LEFT JOIN tasks t ON t.project_id = p.id
+      WHERE p.goal_id = ? AND p.archived_at IS NULL
+      ''',
+      [goalId],
+    );
+    final row = rows.single;
+    return (
+      completed: (row['completed'] as num?)?.toInt() ?? 0,
+      active: (row['active'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  Future<String> ensureGoalProject(String goalId, String title) async {
+    final existing = await database.database.query(
+      'projects',
+      columns: ['id'],
+      where: 'goal_id = ? AND archived_at IS NULL',
+      whereArgs: [goalId],
+      orderBy: 'created_at',
+      limit: 1,
+    );
+    if (existing.isNotEmpty) return existing.single['id'] as String;
+    final id = _newId();
+    await database.database.insert('projects', {
+      'id': id,
+      'title': title,
+      'description': '',
+      'goal_id': goalId,
+      'created_at': _now().toUtc().toIso8601String(),
+    });
+    return id;
+  }
+
+  Future<void> addGoalActions(String goalId, List<String> titles) async {
+    final values = titles.map((title) => title.trim()).toList();
+    if (values.isEmpty) return;
+    if (values.length > 12 || values.any((title) => title.isEmpty || title.length > 160)) {
+      throw ArgumentError('Недопустимый список шагов');
+    }
+    await database.database.transaction((tx) async {
+      final goal = await tx.query('goals', where: 'id = ?', whereArgs: [goalId]);
+      if (goal.isEmpty) throw StateError('Цель больше не существует');
+      final project = await tx.query(
+        'projects',
+        columns: ['id'],
+        where: 'goal_id = ? AND archived_at IS NULL',
+        whereArgs: [goalId],
+        orderBy: 'created_at',
+        limit: 1,
+      );
+      final now = _now().toUtc().toIso8601String();
+      final projectId = project.isEmpty ? _newId() : project.single['id'] as String;
+      if (project.isEmpty) {
+        await tx.insert('projects', {
+          'id': projectId,
+          'title': goal.single['title'],
+          'goal_id': goalId,
+          'created_at': now,
+        });
+      }
+      for (final title in values) {
+        await tx.insert('tasks', {
+          'id': _newId(),
+          'title': title,
+          'status': 'planned',
+          'project_id': projectId,
+          'created_at': now,
+          'updated_at': now,
+        });
+      }
+    });
+    await database.remindersChanged();
   }
 }

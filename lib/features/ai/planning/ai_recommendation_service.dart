@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:sqflite_common/sqlite_api.dart';
 
 import '../../../core/app_database.dart';
+import '../../planning/planning_repository.dart';
 import '../model/local_ai_engine.dart';
 import 'ai_context_builder.dart';
 import 'ai_suggestion.dart';
@@ -121,6 +124,24 @@ class AiRecommendationService {
     );
   }
 
+  Future<List<String>> generateGoalSteps(String goalTitle) async {
+    final title = goalTitle.trim();
+    if (title.isEmpty || title.length > 240) {
+      throw ArgumentError.value(goalTitle, 'goalTitle');
+    }
+    final prompt = '''
+Ты локальный планировщик. Разбей долгосрочную цель на конкретные небольшие действия.
+Цель: $title
+Верни только JSON: {"steps":["...", "..."]}. От 3 до 8 действий, каждое короткое, выполнимое и на русском.
+Не добавляй вводные фразы, даты или Markdown.
+''';
+    final response = await generator.generate(prompt, maxTokens: 320);
+    return GoalStepValidator().parse(response);
+  }
+
+  Future<void> applyGoalSteps(String goalId, List<String> steps) =>
+      PlanningRepository(database).addGoalActions(goalId, steps);
+
   Future<void> applySelected(
     AiSuggestion suggestion,
     Set<String> selectedTaskIds,
@@ -152,4 +173,37 @@ class AiRecommendationService {
 
   String _formatDay(DateTime date) =>
       '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+}
+
+class GoalStepValidator {
+  List<String> parse(String response) {
+    final start = response.indexOf('{');
+    final end = response.lastIndexOf('}');
+    if (start < 0 || end <= start) {
+      throw const FormatException('Ответ не содержит JSON');
+    }
+    final dynamic decoded;
+    try {
+      decoded = jsonDecode(response.substring(start, end + 1));
+    } on FormatException {
+      throw const FormatException('Ответ ИИ содержит неверный JSON');
+    }
+    if (decoded is! Map<String, dynamic> || decoded['steps'] is! List) {
+      throw const FormatException('Не найден список шагов цели');
+    }
+    final raw = decoded['steps'] as List;
+    if (raw.length < 3 || raw.length > 8) {
+      throw const FormatException('Нужно от 3 до 8 шагов');
+    }
+    final steps = <String>[];
+    for (final item in raw) {
+      if (item is! String) throw const FormatException('Шаг должен быть текстом');
+      final step = item.trim();
+      if (step.isEmpty || step.length > 160 || steps.contains(step)) {
+        throw const FormatException('Шаг пустой, слишком длинный или повторяется');
+      }
+      steps.add(step);
+    }
+    return steps;
+  }
 }

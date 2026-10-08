@@ -108,12 +108,12 @@ void main() {
     await tester.tap(find.text('Сохранить'));
     await tester.pumpAndSettle();
     expect(find.text('Выпустить приложение'), findsOneWidget);
-
-    await tester.tap(find.byTooltip('Обновить прогресс'));
+    await tester.tap(find.text('Сделать главной'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '25');
-    await tester.tap(find.text('Сохранить'));
-    await tester.pumpAndSettle();
-    expect(find.text('25 / 100'), findsOneWidget);
+    final selected = await PlanningRepository(database).primaryGoal();
+    expect(selected?.title, 'Выпустить приложение');
+    final counts = await PlanningRepository(database).goalTaskCounts(selected!.id);
+    expect(counts.completed + counts.active, 0);
+    expect(await database.database.query('tasks'), isEmpty);
   });
 }

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/app_theme.dart';
 import '../../core/widgets/pressable_panel.dart';
+import '../../core/models.dart';
 import '../planning/planning_repository.dart';
 import '../planning/today_screen.dart';
 import '../wellbeing/wellbeing_repository.dart';
@@ -163,22 +164,28 @@ class _PrimaryGoalCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return PressablePanel(
-      key: const Key('primary-goal-card'),
-      onTap: onTap,
-      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            colors.primaryContainer,
-            Color.lerp(colors.primaryContainer, colors.tertiary, 0.18)!,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        border: Border.all(color: colors.primary.withValues(alpha: 0.22)),
-      ),
-      child: Row(
+    return FutureBuilder<Goal?>(
+      future: (context.findAncestorWidgetOfExactType<HomeScreen>())!
+          .planning
+          .primaryGoal(),
+      builder: (context, snapshot) {
+        final goal = snapshot.data;
+        return PressablePanel(
+          key: const Key('primary-goal-card'),
+          onTap: onTap,
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                colors.primaryContainer,
+                Color.lerp(colors.primaryContainer, colors.tertiary, 0.18)!,
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border.all(color: colors.primary.withValues(alpha: 0.22)),
+          ),
+          child: Row(
         children: [
           Container(
             width: 42,
@@ -204,24 +211,57 @@ class _PrimaryGoalCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Выбрать цель',
+                  goal?.title ?? 'Выбрать цель',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: colors.onPrimaryContainer,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
+                if (goal != null)
+                  FutureBuilder<({int completed, int active})>(
+                    future: (context.findAncestorWidgetOfExactType<HomeScreen>())!
+                        .planning.goalTaskCounts(goal.id),
+                    builder: (context, counts) {
+                      final value = counts.data;
+                      final total = (value?.completed ?? 0) + (value?.active ?? 0);
+                      return Text(
+                        '${value?.completed ?? 0} из $total шагов выполнено',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: colors.onPrimaryContainer.withValues(alpha: 0.76),
+                        ),
+                      );
+                    },
+                  ),
               ],
             ),
           ),
-          ProgressPill(
-            icon: Icons.auto_awesome_rounded,
-            label: 'с ИИ',
-            color: colors.tertiary,
-          ),
+          if (goal != null)
+            FutureBuilder<({int completed, int active})>(
+              future: (context.findAncestorWidgetOfExactType<HomeScreen>())!
+                  .planning
+                  .goalTaskCounts(goal.id),
+              builder: (context, counts) {
+                final value = counts.data;
+                final total = (value?.completed ?? 0) + (value?.active ?? 0);
+                return ProgressPill(
+                  icon: Icons.auto_awesome_rounded,
+                  label: '${value?.completed ?? 0}/$total',
+                  color: colors.tertiary,
+                );
+              },
+            )
+          else
+            ProgressPill(
+              icon: Icons.auto_awesome_rounded,
+              label: 'с ИИ',
+              color: colors.tertiary,
+            ),
           const SizedBox(width: 5),
           Icon(Icons.chevron_right_rounded, color: colors.onPrimaryContainer),
-        ],
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
