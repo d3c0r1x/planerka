@@ -89,16 +89,16 @@ void main() {
     expect(find.byKey(const Key('nav-today')), findsOneWidget);
     final page = tester.getRect(find.byKey(const Key('main-page-view')));
     final gesture = await tester.startGesture(
-      Offset(page.center.dx + 120, page.center.dy),
+      Offset(page.right - 8, page.center.dy),
     );
-    await gesture.moveBy(const Offset(-360, 0));
+    await gesture.moveBy(Offset(-page.width * .7, 0));
     await gesture.up();
     await tester.pumpAndSettle();
     expect(
       (tester.widget<NavigationBar>(find.byType(NavigationBar))).selectedIndex,
-      greaterThan(0),
+      1,
     );
-    expect(find.text('Inbox пуст. Добавьте любую мысль.'), findsOneWidget);
+    expect(find.byKey(const Key('inbox-hero')), findsOneWidget);
   });
 
   testWidgets('sleep mode is available in the home quick menu', (tester) async {

@@ -1,19 +1,25 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const seed = Color(0xFF8967FF);
-  static const mint = Color(0xFF55D8C7);
-  static const coral = Color(0xFFFFA56B);
-  static const pink = Color(0xFFFF7FB0);
+  static const seed = Color(0xFF9A7BFF);
+  static const mint = Color(0xFF5DE1D2);
+  static const coral = Color(0xFFFFA56F);
+  static const pink = Color(0xFFFF79B5);
+  static const night = Color(0xFF000000);
+  static const surfaceLow = Color(0xFF10131B);
+  static const surface = Color(0xFF171C27);
+  static const surfaceHigh = Color(0xFF202737);
+  static const surfaceHighest = Color(0xFF2A3447);
 
   static ThemeData light() => _build(Brightness.light);
   static ThemeData dark() => _build(Brightness.dark);
 
   static ThemeData _build(Brightness brightness) {
     final base = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
+    final typography = ThemeData(brightness: brightness).textTheme;
     final scheme = brightness == Brightness.dark
         ? base.copyWith(
-            primary: const Color(0xFFA48BFF),
+            primary: const Color(0xFFB69CFF),
             onPrimary: const Color(0xFF171027),
             primaryContainer: const Color(0xFF30254F),
             onPrimaryContainer: const Color(0xFFE9DDFF),
@@ -26,12 +32,12 @@ class AppTheme {
             tertiaryContainer: const Color(0xFF4A2B1A),
             onTertiaryContainer: const Color(0xFFFFDFC7),
             error: const Color(0xFFFF718B),
-            surface: const Color(0xFF000000),
-            surfaceContainerLowest: const Color(0xFF000000),
-            surfaceContainerLow: const Color(0xFF08090D),
-            surfaceContainer: const Color(0xFF1C1E27),
-            surfaceContainerHigh: const Color(0xFF242630),
-            surfaceContainerHighest: const Color(0xFF2D303B),
+            surface: night,
+            surfaceContainerLowest: night,
+            surfaceContainerLow: surfaceLow,
+            surfaceContainer: surface,
+            surfaceContainerHigh: surfaceHigh,
+            surfaceContainerHighest: surfaceHighest,
             onSurface: const Color(0xFFF5F3FA),
             onSurfaceVariant: const Color(0xFFB7B6C4),
             outline: const Color(0xFF858392),
@@ -46,11 +52,42 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: scheme.surface,
+      textTheme: typography.copyWith(
+        displaySmall: typography.displaySmall?.copyWith(
+          fontSize: 38,
+          height: 1.04,
+          letterSpacing: -1.2,
+          fontWeight: FontWeight.w800,
+        ),
+        headlineSmall: typography.headlineSmall?.copyWith(
+          fontSize: 27,
+          height: 1.08,
+          letterSpacing: -0.7,
+          fontWeight: FontWeight.w800,
+        ),
+        titleLarge: typography.titleLarge?.copyWith(
+          fontSize: 21,
+          height: 1.15,
+          letterSpacing: -0.35,
+          fontWeight: FontWeight.w700,
+        ),
+        titleMedium: typography.titleMedium?.copyWith(
+          fontSize: 17,
+          height: 1.2,
+          letterSpacing: -0.2,
+          fontWeight: FontWeight.w700,
+        ),
+        bodyLarge: typography.bodyLarge?.copyWith(fontSize: 16, height: 1.4),
+      ),
       cardTheme: CardThemeData(
         color: scheme.surfaceContainerLow,
         elevation: 0,
-        margin: const EdgeInsets.symmetric(vertical: 6),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: BorderSide(color: scheme.outlineVariant.withValues(alpha: .4)),
+        ),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: scheme.surface,

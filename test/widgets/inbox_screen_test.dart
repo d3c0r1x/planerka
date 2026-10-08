@@ -38,6 +38,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('nav-inbox')));
     await tester.pumpAndSettle();
 
+    expect(find.byKey(const Key('inbox-hero')), findsOneWidget);
+    expect(find.byKey(const Key('inbox-count')), findsOneWidget);
     expect(find.text('Купить корм'), findsOneWidget);
     await tester.tap(find.byTooltip('Разобрать'));
     await tester.pumpAndSettle();

@@ -700,76 +700,94 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
         systemNavigationBarContrastEnforced: false,
       ),
       child: SizedBox(
-        height: 82,
+        height: 86,
         child: Stack(
           alignment: Alignment.topCenter,
           children: [
             Positioned.fill(
-              child: NavigationBar(
-                height: 82,
-                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-                indicatorColor: Colors.transparent,
-                backgroundColor: Colors.black,
-                selectedIndex: _tab,
-                onDestinationSelected: _selectTab,
-                destinations: [
-                  NavigationDestination(
-                    key: const ValueKey('nav-today'),
-                    icon: const _NavGlyph(
-                      icon: Icons.wb_sunny_rounded,
-                      color: Color(0xFFFFC857),
-                      selected: false,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: const Color(0xF20D1018),
+                  border: Border(
+                    top: BorderSide(
+                      color: Theme.of(context).colorScheme.outlineVariant
+                          .withValues(alpha: .52),
                     ),
-                    selectedIcon: const _NavGlyph(
-                      icon: Icons.wb_sunny_rounded,
-                      color: Color(0xFFFFC857),
-                      selected: true,
-                    ),
-                    label: 'Сегодня',
                   ),
-                  NavigationDestination(
-                    key: const ValueKey('nav-inbox'),
-                    icon: const _NavGlyph(
-                      icon: Icons.inbox_rounded,
-                      color: Color(0xFF62C9FF),
-                      selected: false,
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x66000000),
+                      blurRadius: 26,
+                      offset: Offset(0, -8),
                     ),
-                    selectedIcon: const _NavGlyph(
-                      icon: Icons.inbox_rounded,
-                      color: Color(0xFF62C9FF),
-                      selected: true,
+                  ],
+                ),
+                child: NavigationBar(
+                  height: 82,
+                  labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                  indicatorColor: Colors.transparent,
+                  backgroundColor: Colors.transparent,
+                  selectedIndex: _tab,
+                  onDestinationSelected: _selectTab,
+                  destinations: [
+                    NavigationDestination(
+                      key: const ValueKey('nav-today'),
+                      icon: const _NavGlyph(
+                        icon: Icons.wb_sunny_rounded,
+                        color: Color(0xFFFFC857),
+                        selected: false,
+                      ),
+                      selectedIcon: const _NavGlyph(
+                        icon: Icons.wb_sunny_rounded,
+                        color: Color(0xFFFFC857),
+                        selected: true,
+                      ),
+                      label: 'Сегодня',
                     ),
-                    label: 'Inbox',
-                  ),
-                  NavigationDestination(
-                    key: const ValueKey('nav-focus'),
-                    icon: const _NavGlyph(
-                      icon: Icons.bolt_rounded,
-                      color: Color(0xFFFF8C69),
-                      selected: false,
+                    NavigationDestination(
+                      key: const ValueKey('nav-inbox'),
+                      icon: const _NavGlyph(
+                        icon: Icons.inbox_rounded,
+                        color: Color(0xFF62C9FF),
+                        selected: false,
+                      ),
+                      selectedIcon: const _NavGlyph(
+                        icon: Icons.inbox_rounded,
+                        color: Color(0xFF62C9FF),
+                        selected: true,
+                      ),
+                      label: 'Inbox',
                     ),
-                    selectedIcon: const _NavGlyph(
-                      icon: Icons.bolt_rounded,
-                      color: Color(0xFFFF8C69),
-                      selected: true,
+                    NavigationDestination(
+                      key: const ValueKey('nav-focus'),
+                      icon: const _NavGlyph(
+                        icon: Icons.bolt_rounded,
+                        color: Color(0xFFFF8C69),
+                        selected: false,
+                      ),
+                      selectedIcon: const _NavGlyph(
+                        icon: Icons.bolt_rounded,
+                        color: Color(0xFFFF8C69),
+                        selected: true,
+                      ),
+                      label: 'Фокус',
                     ),
-                    label: 'Фокус',
-                  ),
-                  NavigationDestination(
-                    key: const ValueKey('nav-progress'),
-                    icon: const _NavGlyph(
-                      icon: Icons.auto_graph_rounded,
-                      color: Color(0xFFA991FF),
-                      selected: false,
+                    NavigationDestination(
+                      key: const ValueKey('nav-progress'),
+                      icon: const _NavGlyph(
+                        icon: Icons.auto_graph_rounded,
+                        color: Color(0xFFA991FF),
+                        selected: false,
+                      ),
+                      selectedIcon: const _NavGlyph(
+                        icon: Icons.auto_graph_rounded,
+                        color: Color(0xFFA991FF),
+                        selected: true,
+                      ),
+                      label: 'Прогресс',
                     ),
-                    selectedIcon: const _NavGlyph(
-                      icon: Icons.auto_graph_rounded,
-                      color: Color(0xFFA991FF),
-                      selected: true,
-                    ),
-                    label: 'Прогресс',
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             Positioned(

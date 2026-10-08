@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:planerka/app.dart';
 import 'package:planerka/core/app_database.dart';
+import 'package:planerka/core/app_theme.dart';
 import 'package:planerka/features/inbox/inbox_repository.dart';
 import 'package:planerka/features/wellbeing/wellbeing_repository.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -51,9 +52,22 @@ void main() {
     expect(find.text('Твой день, твой ритм'), findsOneWidget);
     expect(find.byKey(const ValueKey('today-screen-true')), findsOneWidget);
     expect(find.byKey(const Key('home-day-progress')), findsOneWidget);
+    expect(find.byKey(const Key('home-goal-hero')), findsOneWidget);
+    expect(find.byKey(const Key('home-today-section')), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('home-today-section'))).dy,
+      lessThan(640),
+    );
     expect(find.text('Inbox'), findsAtLeastNWidgets(1));
     expect(find.text('Таймер'), findsOneWidget);
     expect(find.text('Привычки'), findsOneWidget);
     expect(find.text('Дневник'), findsOneWidget);
+  });
+
+  test('dark surfaces use layered charcoal over a black canvas', () {
+    final theme = AppTheme.dark();
+    expect(theme.colorScheme.surface, const Color(0xFF000000));
+    expect(theme.colorScheme.surfaceContainerLow, const Color(0xFF10131B));
+    expect(theme.colorScheme.surfaceContainer, const Color(0xFF171C27));
   });
 }

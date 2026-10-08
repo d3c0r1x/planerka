@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:planerka/core/app_database.dart';
 import 'package:planerka/features/planning/calendar_screen.dart';
 import 'package:planerka/features/planning/planning_repository.dart';
+import 'package:planerka/features/inbox/inbox_repository.dart';
 import 'package:planerka/features/shifts/shift_calendar_section.dart';
 import 'package:planerka/features/shifts/shift_models.dart';
 import 'package:planerka/features/shifts/shift_repository.dart';
@@ -193,6 +194,43 @@ void main() {
     await tester.tap(find.byTooltip('Настроить график смен'));
     await tester.pumpAndSettle();
     expect(find.text('Настройка смен'), findsOneWidget);
+  });
+
+  testWidgets('calendar highlights selected day and task deadline', (
+    tester,
+  ) async {
+    final inbox = InboxRepository(database);
+    final task = await inbox.add('Подготовить документы');
+    await inbox.triage(
+      task.id,
+      TaskDisposition.planned,
+      dueAt: DateTime(anchor.year, anchor.month, anchor.day, 18),
+    );
+    expect(
+      (await PlanningRepository(database).listForDay(anchor))
+          .map((entry) => entry.id),
+      contains(task.id),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CalendarScreen(
+          repository: PlanningRepository(database),
+          shifts: shifts,
+          initialDate: anchor,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('calendar-selected-day-card')), findsOneWidget);
+    await tester.drag(find.byType(ListView).first, const Offset(0, -1800));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(Key('calendar-task-${task.id}')), findsOneWidget);
+    expect(
+      find.byKey(Key('calendar-task-deadline-${task.id}')),
+      findsOneWidget,
+    );
   });
 }
 

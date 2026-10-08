@@ -62,6 +62,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Выполнено задач'), findsOneWidget);
+    expect(find.byKey(const Key('progress-metric-completed')), findsOneWidget);
     await tester.tap(find.text('Неделя'));
     await tester.pumpAndSettle();
     expect(find.text('Отметки привычек'), findsOneWidget);

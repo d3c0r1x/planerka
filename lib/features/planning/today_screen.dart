@@ -261,7 +261,11 @@ class _TodayScreenState extends State<TodayScreen> {
               ...plan.overdue.map((task) => _taskTile(task, missed: true)),
               const SizedBox(height: 16),
             ],
-            Text('Сегодня', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Сегодня',
+              key: const Key('home-today-section'),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             if (plan.today.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 12),

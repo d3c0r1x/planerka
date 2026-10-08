@@ -85,56 +85,57 @@ class _HomeScreenState extends State<HomeScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(18, 3, 18, 8),
+          padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                date,
-                style: Theme.of(context).textTheme.labelLarge
-                    ?.copyWith(color: colors.onSurfaceVariant),
-              ),
-              const SizedBox(height: 1),
-              Text(
-                'Твой день, твой ритм',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.5,
-                ),
+              Row(
+                children: [
+                  Icon(Icons.wb_sunny_rounded, size: 16, color: AppTheme.coral),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      date,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: colors.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const ProgressPill(
+                    icon: Icons.auto_awesome_rounded,
+                    label: 'мой ритм',
+                    color: AppTheme.mint,
+                  ),
+                ],
               ),
               const SizedBox(height: 7),
+              Text(
+                'Твой день, твой ритм',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 12),
               _DayProgressStrip(planning: widget.planning),
-              const SizedBox(height: 10),
+              const SizedBox(height: 11),
               _PrimaryGoalCard(
                 planning: widget.planning,
                 onTap: widget.onChooseGoal,
               ),
-              const SizedBox(height: 9),
+              const SizedBox(height: 10),
               _ModelStatusCard(
                 store: widget.modelStore,
                 downloader: widget.modelDownloader,
                 onOpen: widget.onModel,
               ),
-              const SizedBox(height: 9),
+              const SizedBox(height: 10),
               _QuickInboxInput(
                 controller: _input,
                 onSubmit: _capture,
                 saving: _saving,
               ),
-              const SizedBox(height: 9),
-              _DayCard(onFocus: widget.onFocus, wellbeing: widget.wellbeing),
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Expanded(
-                    child: _QuickAction(
-                      icon: Icons.inbox_rounded,
-                      label: 'Inbox',
-                      color: AppTheme.mint,
-                      onTap: widget.onInbox,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
                   Expanded(
                     child: _QuickAction(
                       icon: Icons.timer_rounded,
@@ -152,7 +153,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       onTap: widget.onHabits,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: _QuickAction(
                       icon: Icons.mood_rounded,
@@ -192,132 +193,132 @@ class _PrimaryGoalCard extends StatelessWidget {
         final goals = snapshot.data ?? const <Goal>[];
         final goal = goals.isEmpty ? null : goals.first;
         return PressablePanel(
-          key: const Key('primary-goal-card'),
+          key: const Key('home-goal-hero'),
           onTap: onTap,
-          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
+          borderRadius: 28,
+          padding: const EdgeInsets.fromLTRB(17, 16, 15, 15),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                colors.primaryContainer,
-                Color.lerp(colors.primaryContainer, colors.tertiary, 0.18)!,
+                const Color(0xFF211934),
+                const Color(0xFF29213F),
+                const Color(0xFF252034),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            border: Border.all(color: colors.primary.withValues(alpha: 0.22)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: colors.primary.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Icon(Icons.flag_rounded, color: colors.primary),
+            border: Border.all(color: colors.primary.withValues(alpha: 0.34)),
+            boxShadow: [
+              BoxShadow(
+                color: colors.primary.withValues(alpha: .12),
+                blurRadius: 28,
+                offset: const Offset(0, 10),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'ГЛАВНАЯ ЦЕЛЬ',
+            ],
+          ),
+          child: Column(
+            key: const Key('primary-goal-card'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: colors.primary.withValues(alpha: .18),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: colors.primary.withValues(alpha: .32),
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.flag_rounded,
+                      color: colors.primary,
+                      size: 19,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'ГЛАВНАЯ ЦЕЛЬ${goals.length > 1 ? '  ·  ${goals.length}' : ''}',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: colors.onPrimaryContainer.withValues(
-                          alpha: 0.72,
-                        ),
-                        letterSpacing: 1.1,
+                        color: const Color(0xFFD0C6F6),
+                        letterSpacing: 1.05,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      goal?.title ?? 'Выбрать цель',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: colors.onPrimaryContainer,
-                        fontWeight: FontWeight.w700,
-                      ),
+                  ),
+                  if (goal != null)
+                    const ProgressPill(
+                      icon: Icons.auto_awesome_rounded,
+                      label: 'с ИИ',
+                      color: AppTheme.mint,
                     ),
-                    if (goal != null)
-                      FutureBuilder<({int completed, int total})>(
-                        future: planning.goalTaskProgress(goal.id),
-                        builder: (context, counts) {
-                          final value = counts.data;
-                          return Text(
-                            '${value?.completed ?? 0} из ${value?.total ?? 0} шагов выполнено',
-                            style: Theme.of(context).textTheme.labelSmall
-                                ?.copyWith(
-                                  color: colors.onPrimaryContainer.withValues(
-                                    alpha: 0.76,
-                                  ),
-                                ),
-                          );
-                        },
-                      ),
-                    if (goal != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 7),
-                        child: FutureBuilder<({int completed, int total})>(
-                          future: planning.goalTaskProgress(goal.id),
-                          builder: (context, counts) {
-                            final value = counts.data;
-                            final progress = value == null || value.total == 0
-                                ? 0.0
-                                : value.completed / value.total;
-                            return ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: LinearProgressIndicator(
-                                key: const Key('home-primary-goal-progress'),
-                                value: progress,
-                                minHeight: 6,
-                                backgroundColor: colors.onPrimaryContainer
-                                    .withValues(alpha: .16),
-                                valueColor: AlwaysStoppedAnimation(
-                                  colors.tertiary,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    if (goals.length > 1)
-                      Text(
-                        '+ ещё ${goals.length - 1} цели',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: colors.onPrimaryContainer.withValues(
-                            alpha: .78,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+                  Icon(Icons.chevron_right_rounded, color: colors.onSurface),
+                ],
               ),
-              if (goal != null)
+              const SizedBox(height: 12),
+              Text(
+                goal?.title ?? 'Выбрать главную цель',
+                key: const Key('primary-goal-title'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleLarge
+                    ?.copyWith(color: Colors.white, fontSize: 20),
+              ),
+              if (goal == null) ...[
+                const SizedBox(height: 3),
+                Text(
+                  'Поставь ориентир — соберём к нему путь',
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: const Color(0xFFC3BCD9)),
+                ),
+              ] else ...[
+                const SizedBox(height: 4),
                 FutureBuilder<({int completed, int total})>(
                   future: planning.goalTaskProgress(goal.id),
                   builder: (context, counts) {
                     final value = counts.data;
                     final total = value?.total ?? 0;
-                    return ProgressPill(
-                      icon: Icons.auto_awesome_rounded,
-                      label: '${value?.completed ?? 0}/$total',
-                      color: colors.tertiary,
+                    final completed = value?.completed ?? 0;
+                    final progress = total == 0 ? 0.0 : completed / total;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          total == 0
+                              ? 'Добавь первый шаг к цели'
+                              : '$completed из $total шагов · ${(progress * 100).round()}%',
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(color: const Color(0xFFD0C6F6)),
+                        ),
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: TweenAnimationBuilder<double>(
+                            tween: Tween(begin: 0, end: progress),
+                            duration: const Duration(milliseconds: 700),
+                            curve: Curves.easeOutCubic,
+                            builder: (context, value, _) =>
+                                LinearProgressIndicator(
+                                  key: const Key('home-primary-goal-progress'),
+                                  value: value,
+                                  minHeight: 8,
+                                  backgroundColor: Colors.white.withValues(
+                                    alpha: .12,
+                                  ),
+                                  valueColor: const AlwaysStoppedAnimation(
+                                    AppTheme.mint,
+                                  ),
+                                ),
+                          ),
+                        ),
+                      ],
                     );
                   },
-                )
-              else
-                ProgressPill(
-                  icon: Icons.auto_awesome_rounded,
-                  label: 'с ИИ',
-                  color: colors.tertiary,
                 ),
-              const SizedBox(width: 5),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: colors.onPrimaryContainer,
-              ),
+              ],
             ],
           ),
         );
@@ -568,105 +569,6 @@ class _DayProgressStrip extends StatelessWidget {
   }
 }
 
-class _DayCard extends StatefulWidget {
-  const _DayCard({required this.onFocus, required this.wellbeing});
-  final VoidCallback onFocus;
-  final WellbeingRepository wellbeing;
-
-  @override
-  State<_DayCard> createState() => _DayCardState();
-}
-
-class _DayCardState extends State<_DayCard> {
-  late final Future<int> _streak;
-
-  @override
-  void initState() {
-    super.initState();
-    _streak = _longestStreak();
-  }
-
-  Future<int> _longestStreak() async {
-    final habits = await widget.wellbeing.listHabits();
-    var longest = 0;
-    for (final habit in habits) {
-      final summary = await widget.wellbeing.summary(habit.id, DateTime.now());
-      if (summary.streak > longest) longest = summary.streak;
-    }
-    return longest;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            colors.surfaceContainerHigh,
-            colors.surfaceContainer.withValues(alpha: 0.82),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(21),
-        border: Border.all(
-          color: colors.outlineVariant.withValues(alpha: 0.55),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: colors.tertiary.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(
-              Icons.local_fire_department_rounded,
-              color: colors.tertiary,
-            ),
-          ),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Твой ритм',
-                  style: Theme.of(context).textTheme.titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w700),
-                ),
-                FutureBuilder<int>(
-                  future: _streak,
-                  builder: (context, snapshot) => Text(
-                    '${snapshot.data ?? 0} дней подряд',
-                    style: Theme.of(context).textTheme.labelMedium
-                        ?.copyWith(color: colors.onSurfaceVariant),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          FilledButton.tonalIcon(
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(44, 40),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              backgroundColor: colors.primary.withValues(alpha: 0.16),
-              foregroundColor: colors.primary,
-            ),
-            onPressed: widget.onFocus,
-            icon: const Icon(Icons.play_arrow_rounded),
-            label: const Text('Фокус'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _QuickAction extends StatelessWidget {
   const _QuickAction({
     required this.icon,
@@ -683,8 +585,8 @@ class _QuickAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) => PressablePanel(
     onTap: onTap,
-    borderRadius: 20,
-    padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
+    borderRadius: 16,
+    padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 7),
     decoration: BoxDecoration(
       gradient: LinearGradient(
         colors: [color.withValues(alpha: 0.2), color.withValues(alpha: 0.07)],
@@ -693,17 +595,19 @@ class _QuickAction extends StatelessWidget {
       ),
       border: Border.all(color: color.withValues(alpha: 0.22)),
     ),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(icon, color: color, size: 23),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.labelSmall
-              ?.copyWith(fontWeight: FontWeight.w700),
+        Icon(icon, color: color, size: 17),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
         ),
       ],
     ),

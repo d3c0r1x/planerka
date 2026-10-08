@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/app_theme.dart';
 import 'review_service.dart';
 
 class ProgressScreen extends StatefulWidget {
@@ -53,16 +54,49 @@ class _ProgressScreenState extends State<ProgressScreen> {
     IconData icon,
     String label,
     String value,
+    Color accent,
+    String keyName,
   ) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(16),
+    child: Container(
+      key: ValueKey(keyName),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(21),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [accent.withValues(alpha: .18), const Color(0xFF171820)],
+        ),
+        border: Border.all(color: accent.withValues(alpha: .25)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Icon(icon, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(height: 12),
-          Text(value, style: Theme.of(context).textTheme.headlineMedium),
-          Text(label, style: Theme.of(context).textTheme.bodyMedium),
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: .16),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: accent, size: 20),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: Theme.of(context).textTheme.headlineMedium
+                    ?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              Text(
+                label,
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: const Color(0xFFB7B6C4)),
+              ),
+            ],
+          ),
         ],
       ),
     ),
@@ -149,24 +183,32 @@ class _ProgressScreenState extends State<ProgressScreen> {
                       Icons.task_alt_rounded,
                       'Выполнено задач',
                       '${review.completedTasks}',
+                      AppTheme.mint,
+                      'progress-metric-completed',
                     ),
                     _metric(
                       context,
                       Icons.timer_rounded,
                       'Фокус-сессии',
                       '${review.focusSessions}',
+                      AppTheme.seed,
+                      'progress-metric-focus',
                     ),
                     _metric(
                       context,
                       Icons.hourglass_bottom_rounded,
                       'Минуты фокуса',
                       '${review.focusMinutes}',
+                      AppTheme.coral,
+                      'progress-metric-minutes',
                     ),
                     _metric(
                       context,
                       Icons.favorite_rounded,
                       'Отметки привычек',
                       '${review.habitCheckins}',
+                      AppTheme.pink,
+                      'progress-metric-habits',
                     ),
                   ],
                 ),

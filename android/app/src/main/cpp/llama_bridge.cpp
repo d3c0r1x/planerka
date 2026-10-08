@@ -84,9 +84,17 @@ Java_com_planerka_mobile_LocalAiNative_generate(
     if (token_count <= 0) return env->NewStringUTF("Не удалось разобрать запрос.");
 
     auto context_params = llama_context_default_params();
-    context_params.n_ctx = 4096;
-    context_params.n_batch = std::max(512, token_count);
-    context_params.n_threads = std::max(2, static_cast<int32_t>(std::thread::hardware_concurrency() / 2));
+    const auto trained_context = static_cast<uint32_t>(
+        llama_model_n_ctx_train(model));
+    // Qwen3-0.6B is trained for 32K tokens. A personal planning prompt and
+    // short recommendation do not need that cache; cap it to keep memory and
+    // startup time practical on 8 GB phones and emulators.
+    context_params.n_ctx = std::min<uint32_t>(2048, trained_context);
+    context_params.n_batch = 256;
+    context_params.n_ubatch = 128;
+    const auto available_threads = static_cast<int32_t>(
+        std::thread::hardware_concurrency());
+    context_params.n_threads = std::clamp(available_threads, 2, 4);
     context_params.n_threads_batch = context_params.n_threads;
     llama_context * context = llama_init_from_model(model, context_params);
     if (context == nullptr) return env->NewStringUTF("Недостаточно памяти для локального ответа.");

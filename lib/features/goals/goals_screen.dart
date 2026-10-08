@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../core/app_theme.dart';
 import '../../core/models.dart';
 import '../ai/planning/ai_recommendation_service.dart';
 import '../ai/ai_provider_router.dart';
@@ -352,13 +353,63 @@ class _GoalsScreenState extends State<GoalsScreen> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Card(
-                child: ListTile(
-                  key: const ValueKey('manage-primary-goals'),
-                  leading: const Icon(Icons.stars_rounded),
-                  title: const Text('Основные цели'),
-                  subtitle: const Text('Можно выбрать несколько'),
-                  onTap: _selectPrimaryGoals,
+              Container(
+                key: const Key('goal-progress-summary'),
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(24),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF282044), Color(0xFF151820)],
+                  ),
+                  border: Border.all(
+                    color: AppTheme.seed.withValues(alpha: .4),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: AppTheme.seed.withValues(alpha: .18),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Icon(
+                        Icons.track_changes_rounded,
+                        color: Color(0xFFC6B4FF),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Твои ориентиры',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            '${_primaryGoalIds.length} главных · путь складывается из шагов',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: const Color(0xFFB7B6C4)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      key: const ValueKey('manage-primary-goals'),
+                      tooltip: 'Настроить главные цели',
+                      onPressed: _selectPrimaryGoals,
+                      icon: const Icon(
+                        Icons.tune_rounded,
+                        color: AppTheme.mint,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               if (_primaryGoalIds.isEmpty)
@@ -382,16 +433,29 @@ class _GoalsScreenState extends State<GoalsScreen> {
                     final progress = total == 0
                         ? 0.0
                         : (value!.completed / total);
-                    return Card(
+                    return Container(
                       key: const Key('primary-goal-progress'),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(24),
+                        color: const Color(0xFF171820),
+                        border: Border.all(
+                          color: AppTheme.mint.withValues(alpha: .3),
+                        ),
+                      ),
                       child: Padding(
-                        padding: const EdgeInsets.all(16),
+                        padding: EdgeInsets.zero,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               'Главная цель',
-                              style: Theme.of(context).textTheme.labelLarge,
+                              style: Theme.of(context).textTheme.labelLarge
+                                  ?.copyWith(
+                                    color: AppTheme.mint,
+                                    letterSpacing: .5,
+                                  ),
                             ),
                             const SizedBox(height: 8),
                             Text(
@@ -399,10 +463,15 @@ class _GoalsScreenState extends State<GoalsScreen> {
                               style: Theme.of(context).textTheme.titleLarge,
                             ),
                             const SizedBox(height: 12),
-                            LinearProgressIndicator(
-                              key: const Key('goal-task-progress'),
-                              value: progress,
-                              minHeight: 8,
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: LinearProgressIndicator(
+                                key: const Key('goal-task-progress'),
+                                value: progress,
+                                minHeight: 9,
+                                backgroundColor: const Color(0xFF30313B),
+                                color: AppTheme.mint,
+                              ),
                             ),
                             const SizedBox(height: 6),
                             Text(
@@ -420,7 +489,17 @@ class _GoalsScreenState extends State<GoalsScreen> {
                 ),
               ...snapshot.data!.map((goal) {
                 final isPrimary = _primaryGoalIds.contains(goal.id);
-                return Card(
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(22),
+                    color: const Color(0xFF14151B),
+                    border: Border.all(
+                      color: isPrimary
+                          ? AppTheme.seed.withValues(alpha: .55)
+                          : const Color(0xFF292A34),
+                    ),
+                  ),
                   child: Column(
                     children: [
                       ListTile(

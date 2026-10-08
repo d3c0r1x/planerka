@@ -46,6 +46,7 @@ void main() {
 
     expect(find.text('Цели'), findsOneWidget);
     expect(find.byKey(const Key('goal-task-progress')), findsOneWidget);
+    expect(find.byKey(const Key('goal-progress-summary')), findsOneWidget);
     expect(find.text('Добавьте шаг, чтобы видеть прогресс'), findsOneWidget);
     expect(find.text('0 из 0 шагов выполнено'), findsOneWidget);
 
