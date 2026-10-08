@@ -19,6 +19,10 @@ import 'features/ai/model/model_store.dart';
 import 'features/ai/model/local_ai_engine.dart';
 import 'features/ai/model/model_downloader.dart';
 import 'features/ai/planning/ai_recommendation_service.dart';
+import 'features/ai/ai_provider_router.dart';
+import 'features/ai/ai_provider_settings.dart';
+import 'features/ai/ai_provider_settings_screen.dart';
+import 'features/ai/secure_ai_store.dart';
 
 import 'dart:io';
 
@@ -253,9 +257,46 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
     if (database == null) return null;
     final modelStore = _modelStore;
     if (modelStore == null) return null;
+    final secrets = SecureAiStore();
+    final settings = AiProviderSettingsStore(database, secrets);
     return AiRecommendationService(
       database,
-      LocalAiEngine(store: modelStore, manifest: Qwen3ModelManifest.manifest),
+      AiProviderRouter(
+        local: LocalAiEngine(
+          store: modelStore,
+          manifest: Qwen3ModelManifest.manifest,
+        ),
+        cloud: OpenAiCompatibleGenerator(),
+        settings: settings.load,
+        secrets: secrets,
+      ),
+    );
+  }
+
+  void _openModelScreen() {
+    final database = widget.database;
+    if (database == null) return;
+    Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ModelScreen(
+          database: database,
+          downloader: _sharedModelDownloader,
+          modelStore: _modelStore,
+          enableBackgroundDownload: true,
+        ),
+      ),
+    );
+  }
+
+  void _openAiSettings() {
+    final database = widget.database;
+    if (database == null) return;
+    Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AiProviderSettingsScreen(database: database),
+      ),
     );
   }
 
@@ -423,6 +464,9 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                 MaterialPageRoute<void>(
                   builder: (_) => GoalsScreen(
                     repository: PlanningRepository(widget.database!),
+                    ai: _localAiService(),
+                    onModelRequired: _openModelScreen,
+                    onAiSettingsRequired: _openAiSettings,
                   ),
                 ),
               ),
@@ -516,23 +560,16 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                 onQuickCapture: _quickCapture,
                 modelStore: _modelStore,
                 modelDownloader: _sharedModelDownloader,
-                onModel: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                    builder: (_) => ModelScreen(
-                      database: widget.database,
-                      downloader: _sharedModelDownloader,
-                      modelStore: _modelStore,
-                      enableBackgroundDownload: true,
-                    ),
-                  ),
-                ),
+                onModel: _openModelScreen,
                 isActive: _tab == 0,
                 onChooseGoal: () => Navigator.push(
                   context,
                   MaterialPageRoute<void>(
                     builder: (_) => GoalsScreen(
                       repository: PlanningRepository(widget.database!),
+                      ai: _localAiService(),
+                      onModelRequired: _openModelScreen,
+                      onAiSettingsRequired: _openAiSettings,
                     ),
                   ),
                 ),
@@ -541,6 +578,8 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                 key: ValueKey(_inboxVersion),
                 repository: InboxRepository(widget.database!),
                 ai: _localAiService(),
+                onModelRequired: _openModelScreen,
+                onAiSettingsRequired: _openAiSettings,
               ),
               FocusScreen(
                 engine: TimerEngine(TimerRepository(widget.database!)),

@@ -65,7 +65,12 @@ void main() {
     final context = await service.buildContext();
     expect(context.tasks.map((task) => task.id), ['t1', 't2']);
     expect(context.goals.single.title, 'Читать регулярно');
-    expect(context.diary.single.note, 'Сегодня устал, нужен спокойный темп');
+    expect(context.diary, isEmpty);
+    expect(await service.diaryEnabled(), isFalse);
+
+    await service.setDiaryEnabled(true);
+    final withDiary = await service.buildContext();
+    expect(withDiary.diary.single.note, 'Сегодня устал, нужен спокойный темп');
     expect(await service.diaryEnabled(), isTrue);
 
     await service.setDiaryEnabled(false);
@@ -171,6 +176,9 @@ void main() {
   test('generates a local preview without changing task rows', () async {
     final suggestion = await service.generatePlan();
     expect(suggestion.recommendations, hasLength(2));
+    expect(generator.lastPrompt, isNot(contains('Сегодня устал')));
+    await service.setDiaryEnabled(true);
+    await service.generatePlan();
     expect(generator.lastPrompt, contains('Сегодня устал'));
     expect(
       (await taskRows()).every((row) => row['scheduled_date'] == null),

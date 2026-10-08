@@ -116,7 +116,7 @@ class _LocalAiScreenState extends State<LocalAiScreen> {
             child: Column(
               children: [
                 SwitchListTile(
-                  value: _diaryEnabled ?? true,
+                  value: _diaryEnabled ?? false,
                   onChanged: _diaryEnabled == null ? null : _toggleDiary,
                   title: const Text('Учитывать дневник настроения'),
                   subtitle: const Text('Можно выключить в любой момент'),

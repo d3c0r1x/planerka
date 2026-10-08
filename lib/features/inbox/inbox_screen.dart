@@ -2,15 +2,24 @@ import 'package:flutter/material.dart';
 
 import '../../core/models.dart';
 import '../ai/planning/ai_recommendation_service.dart';
+import '../ai/ai_provider_router.dart';
 import 'inbox_repository.dart';
 import 'triage.dart';
 import '../../features/ai/planning/ai_suggestion.dart';
 
 class InboxScreen extends StatefulWidget {
-  const InboxScreen({super.key, required this.repository, this.ai});
+  const InboxScreen({
+    super.key,
+    required this.repository,
+    this.ai,
+    this.onModelRequired,
+    this.onAiSettingsRequired,
+  });
 
   final InboxRepository repository;
   final AiRecommendationService? ai;
+  final VoidCallback? onModelRequired;
+  final VoidCallback? onAiSettingsRequired;
 
   @override
   State<InboxScreen> createState() => _InboxScreenState();
@@ -144,11 +153,7 @@ class _InboxScreenState extends State<InboxScreen> {
         );
       }
     } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Не удалось связать задачу с целью: $error')),
-        );
-      }
+      _showAiError(error, 'Не удалось связать задачу с целью');
     }
   }
 
@@ -238,14 +243,27 @@ class _InboxScreenState extends State<InboxScreen> {
       await ai.applyInboxSelected(suggestion, accepted);
       if (mounted) _refresh();
     } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ИИ не смог разобрать Inbox: $error')),
-        );
-      }
+      _showAiError(error, 'ИИ не смог разобрать Inbox');
     } finally {
       if (mounted) setState(() => _aiLoading = false);
     }
+  }
+
+  void _showAiError(Object error, String fallback) {
+    if (!mounted) return;
+    if (error is StateError &&
+        error.message.contains('Verified local model is not installed')) {
+      widget.onModelRequired?.call();
+      return;
+    }
+    if (error is CloudConsentRequiredException ||
+        error is CloudProviderConfigurationException) {
+      widget.onAiSettingsRequired?.call();
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$fallback: $error')),
+    );
   }
 
   String _dispositionTitle(String value) => switch (value) {

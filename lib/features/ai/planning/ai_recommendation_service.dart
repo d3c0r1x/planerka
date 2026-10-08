@@ -34,7 +34,7 @@ class AiRecommendationService {
       where: 'key = ?',
       whereArgs: ['ai_include_diary'],
     );
-    return rows.isEmpty ? true : rows.single['value'] == 'true';
+    return rows.isEmpty ? false : rows.single['value'] == 'true';
   }
 
   Future<void> setDiaryEnabled(bool enabled) async {

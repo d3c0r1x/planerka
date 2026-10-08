@@ -46,6 +46,7 @@ dependencies:
   crypto: ^3.0.7
   path_provider: ^2.1.6
   background_downloader: ^9.6.4
+  flutter_secure_storage: ^11.2.0
 
 dev_dependencies:
   flutter_test:

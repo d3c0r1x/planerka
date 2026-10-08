@@ -11,6 +11,7 @@ import 'local_ai_engine.dart';
 import 'local_ai_screen.dart';
 import '../../../core/app_database.dart';
 import '../planning/ai_recommendation_service.dart';
+import '../ai_provider_settings_screen.dart';
 
 class ModelScreen extends StatefulWidget {
   const ModelScreen({
@@ -154,6 +155,24 @@ class _ModelScreenState extends State<ModelScreen> {
           : ListView(
               padding: const EdgeInsets.all(20),
               children: [
+                if (widget.database != null)
+                  Card(
+                    child: ListTile(
+                      key: const Key('open-ai-provider-settings'),
+                      leading: const Icon(Icons.tune_rounded),
+                      title: const Text('Настройки ИИ'),
+                      subtitle: const Text('Локальный или облачный провайдер'),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => Navigator.push<void>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => AiProviderSettingsScreen(
+                            database: widget.database!,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(20),

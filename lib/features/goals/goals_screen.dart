@@ -6,15 +6,25 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../core/models.dart';
 import '../ai/planning/ai_recommendation_service.dart';
+import '../ai/ai_provider_router.dart';
 import '../ai/model/local_ai_engine.dart';
 import '../ai/model/model_manifest.dart';
 import '../ai/model/model_store.dart';
 import '../planning/planning_repository.dart';
 
 class GoalsScreen extends StatefulWidget {
-  const GoalsScreen({super.key, required this.repository});
+  const GoalsScreen({
+    super.key,
+    required this.repository,
+    this.ai,
+    this.onModelRequired,
+    this.onAiSettingsRequired,
+  });
 
   final PlanningRepository repository;
+  final AiRecommendationService? ai;
+  final VoidCallback? onModelRequired;
+  final VoidCallback? onAiSettingsRequired;
 
   @override
   State<GoalsScreen> createState() => _GoalsScreenState();
@@ -135,14 +145,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
   Future<void> _generateSteps(Goal goal) async {
     setState(() => _aiLoading = true);
     try {
-      final root = await getApplicationSupportDirectory();
-      final store = ModelStore(
-        LocalModelFileStore(Directory('${root.path}/models')),
-      );
-      final ai = AiRecommendationService(
-        widget.repository.database,
-        LocalAiEngine(store: store, manifest: Qwen3ModelManifest.manifest),
-      );
+      final ai = widget.ai ?? await _localRecommendations();
       final steps = await ai.generateGoalSteps(goal.title);
       if (!mounted) return;
       final selected = <String>{...steps};
@@ -196,6 +199,16 @@ class _GoalsScreenState extends State<GoalsScreen> {
         );
       }
     } catch (error) {
+      if (error is StateError &&
+          error.message.contains('Verified local model is not installed')) {
+        widget.onModelRequired?.call();
+        return;
+      }
+      if (error is CloudConsentRequiredException ||
+          error is CloudProviderConfigurationException) {
+        widget.onAiSettingsRequired?.call();
+        return;
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Не удалось составить шаги: $error')),
@@ -204,6 +217,17 @@ class _GoalsScreenState extends State<GoalsScreen> {
     } finally {
       if (mounted) setState(() => _aiLoading = false);
     }
+  }
+
+  Future<AiRecommendationService> _localRecommendations() async {
+    final root = await getApplicationSupportDirectory();
+    final store = ModelStore(
+      LocalModelFileStore(Directory('${root.path}/models')),
+    );
+    return AiRecommendationService(
+      widget.repository.database,
+      LocalAiEngine(store: store, manifest: Qwen3ModelManifest.manifest),
+    );
   }
 
   Future<void> _addGoal() async {
@@ -444,6 +468,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                         alignment: MainAxisAlignment.end,
                         children: [
                           TextButton.icon(
+                            key: ValueKey('goal-ai-steps-${goal.id}'),
                             onPressed: _aiLoading
                                 ? null
                                 : () => _generateSteps(goal),
