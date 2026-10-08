@@ -29,6 +29,7 @@ import 'features/backup/backup_service.dart';
 import 'features/planning/calendar_screen.dart';
 import 'features/planning/planning_repository.dart';
 import 'features/planning/projects_screen.dart';
+import 'features/shifts/shift_repository.dart';
 import 'features/reminders/local_notification_port.dart';
 import 'features/reminders/reminder_service.dart';
 import 'features/review/progress_screen.dart';
@@ -369,6 +370,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                 MaterialPageRoute<void>(
                   builder: (_) => CalendarScreen(
                     repository: PlanningRepository(widget.database!),
+                    shifts: ShiftRepository(widget.database!),
                   ),
                 ),
               ),
