@@ -69,6 +69,114 @@ void main() {
     expect(find.textContaining(' — '), findsOneWidget);
   });
 
+  testWidgets('progress compares the selected day with real prior data', (
+    tester,
+  ) async {
+    final now = DateTime.now();
+    final currentAt = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      12,
+    ).toUtc().toIso8601String();
+    final previousAt = DateTime(
+      now.year,
+      now.month,
+      now.day - 1,
+      12,
+    ).toUtc().toIso8601String();
+    Future<void> addCompleted(String id, String completedAt) async {
+      await database.database.insert('tasks', {
+        'id': id,
+        'title': 'Фикстура $id',
+        'status': 'completed',
+        'completed_at': completedAt,
+        'created_at': completedAt,
+        'updated_at': completedAt,
+      });
+    }
+
+    await addCompleted('current-a', currentAt);
+    await addCompleted('current-b', currentAt);
+    await addCompleted('previous-a', previousAt);
+    await database.database.insert('journal_entries', {
+      'id': 'current-mood',
+      'text': 'Current fixture',
+      'mood': 4,
+      'created_at': currentAt,
+    });
+    await database.database.insert('journal_entries', {
+      'id': 'previous-mood',
+      'text': 'Previous fixture',
+      'mood': 3,
+      'created_at': previousAt,
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ProgressScreen(service: ReviewService(database))),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('progress-period-comparison')), findsOneWidget);
+    expect(find.text('Сравнение со вчера'), findsOneWidget);
+    expect(find.text('Задачи +1'), findsOneWidget);
+    expect(find.text('Настроение +1,0'), findsOneWidget);
+
+    await tester.tap(find.text('Неделя'));
+    await tester.pumpAndSettle();
+    expect(find.text('Сравнение с прошлой неделей'), findsOneWidget);
+  });
+
+  testWidgets('progress shows mood ratings without diary text', (tester) async {
+    final now = DateTime.now();
+    await database.database.insert('journal_entries', {
+      'id': 'synthetic-mood-entry',
+      'text': 'Приватный синтетический текст',
+      'mood': 4,
+      'created_at': DateTime(
+        now.year,
+        now.month,
+        now.day,
+        10,
+      ).toUtc().toIso8601String(),
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ProgressScreen(service: ReviewService(database))),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('progress-mood-card')), findsOneWidget);
+    expect(find.text('4,0 из 5'), findsOneWidget);
+    expect(find.text('1 отметка'), findsOneWidget);
+    expect(find.text('Приватный синтетический текст'), findsNothing);
+  });
+
+  testWidgets('progress screen fits 360dp with enlarged text', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(1.35)),
+          child: Scaffold(
+            body: ProgressScreen(service: ReviewService(database)),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('calendar is reachable from Today', (tester) async {
     await tester.pumpWidget(PlanerkaApp(database: database));
     await tester.tap(find.byTooltip('Календарь'));

@@ -222,6 +222,16 @@ class PlanningRepository {
     return rows.map(TaskEntry.fromMap).toList();
   }
 
+  Future<TaskEntry?> taskById(String taskId) async {
+    final rows = await database.database.query(
+      'tasks',
+      where: 'id = ?',
+      whereArgs: [taskId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : TaskEntry.fromMap(rows.single);
+  }
+
   Future<List<Project>> listProjects() async {
     final rows = await database.database.query(
       'projects',

@@ -26,6 +26,8 @@ class PeriodReview {
     required this.focusMinutes,
     required this.habitCheckins,
     required this.goals,
+    this.moodRatingsCount = 0,
+    this.averageMood,
     this.attendedShifts = 0,
     this.missedShifts = 0,
     this.reliabilityScore,
@@ -38,6 +40,8 @@ class PeriodReview {
   final int focusMinutes;
   final int habitCheckins;
   final List<GoalProgress> goals;
+  final int moodRatingsCount;
+  final double? averageMood;
   final int attendedShifts;
   final int missedShifts;
   final int? reliabilityScore;
@@ -76,6 +80,14 @@ class ReviewService {
       'SELECT COUNT(*) AS count FROM habit_logs WHERE date >= ? AND date < ?',
       [_dateKey(start), _dateKey(end)],
     );
+    final moodRows = await database.database.rawQuery(
+      '''
+      SELECT COUNT(mood) AS count, AVG(mood) AS average
+      FROM journal_entries
+      WHERE mood IS NOT NULL AND created_at >= ? AND created_at < ?
+      ''',
+      [startUtc, endUtc],
+    );
     final goalRows = await database.database.query(
       'goals',
       orderBy: 'created_at',
@@ -96,6 +108,7 @@ class ReviewService {
       [_dateKey(weekStart)],
     );
     final penaltyCount = penaltyRows.single['count'] as int;
+    final moodAverage = moodRows.single['average'] as num?;
     return PeriodReview(
       start: start,
       endExclusive: end,
@@ -103,6 +116,8 @@ class ReviewService {
       focusSessions: timerRows.single['count'] as int,
       focusMinutes: ((timerRows.single['seconds'] as num).toInt() / 60).floor(),
       habitCheckins: habitRows.single['count'] as int,
+      moodRatingsCount: moodRows.single['count'] as int,
+      averageMood: moodAverage?.toDouble(),
       goals: goalRows
           .map(
             (row) => GoalProgress(

@@ -38,7 +38,35 @@ void main() {
     expect(week.attendedShifts, 0);
     expect(week.missedShifts, 0);
     expect(week.reliabilityScore, 100);
+    expect(week.moodRatingsCount, 0);
+    expect(week.averageMood, isNull);
   });
+
+  test(
+    'period review summarizes mood scores without reading diary text',
+    () async {
+      final start = DateTime(2026, 10, 8).toUtc();
+      final end = DateTime(2026, 10, 9).toUtc();
+      Future<void> addEntry(String id, DateTime createdAt, int? mood) async {
+        await database.database.insert('journal_entries', {
+          'id': id,
+          'text': 'Секретная заметка $id',
+          'mood': mood,
+          'created_at': createdAt.toIso8601String(),
+        });
+      }
+
+      await addEntry('low', start.add(const Duration(hours: 2)), 2);
+      await addEntry('high', start.add(const Duration(hours: 8)), 4);
+      await addEntry('no-score', start.add(const Duration(hours: 10)), null);
+      await addEntry('outside', end, 5);
+
+      final day = await review.day(DateTime(2026, 10, 8));
+
+      expect(day.moodRatingsCount, 2);
+      expect(day.averageMood, 3);
+    },
+  );
 
   test('week includes start boundary and excludes following Monday', () async {
     await database.database.insert('tasks', {
