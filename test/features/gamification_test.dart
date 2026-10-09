@@ -202,7 +202,10 @@ void main() {
   );
 
   test('v2 backup retains game data and imports legacy v1 backups', () async {
-    final game = GamificationService(database);
+    final game = GamificationService(
+      database,
+      now: () => DateTime(2026, 10, 8, 12),
+    );
     await game.awardTask('task');
     await game.dailyQuests(DateTime(2026, 10, 8));
     await game.addReward('Пауза');

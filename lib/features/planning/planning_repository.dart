@@ -480,6 +480,29 @@ class PlanningRepository {
     );
   }
 
+  Future<String?> goalNextActionTitle(String goalId) async {
+    final rows = await database.database.rawQuery(
+      '''
+      SELECT t.title
+      FROM tasks t
+      WHERE (
+        t.project_id IN (
+          SELECT id FROM projects WHERE goal_id = ? AND archived_at IS NULL
+        )
+        OR t.id IN (SELECT task_id FROM task_goal_links WHERE goal_id = ?)
+      )
+        AND t.status IN ('planned', 'quick')
+      ORDER BY
+        CASE WHEN t.due_at IS NULL THEN 1 ELSE 0 END,
+        t.due_at,
+        t.created_at
+      LIMIT 1
+      ''',
+      [goalId, goalId],
+    );
+    return rows.isEmpty ? null : rows.single['title'] as String?;
+  }
+
   Future<String> ensureGoalProject(String goalId, String title) async {
     final existing = await database.database.query(
       'projects',

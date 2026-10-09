@@ -13,6 +13,8 @@ import '../ai/model/model_manifest.dart';
 import '../ai/model/model_store.dart';
 import '../planning/planning_repository.dart';
 
+typedef _GoalHeroDetails = ({int completed, int total, String? nextAction});
+
 class GoalsScreen extends StatefulWidget {
   const GoalsScreen({
     super.key,
@@ -35,6 +37,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
   late Future<List<Goal>> _goals;
   bool _aiLoading = false;
   Set<String> _primaryGoalIds = {};
+  final Map<String, Future<_GoalHeroDetails>> _goalDetails = {};
 
   @override
   void initState() {
@@ -44,6 +47,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
   }
 
   void _refresh() {
+    _goalDetails.clear();
     setState(() {
       _goals = widget.repository.listGoals();
     });
@@ -195,6 +199,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
       if (accepted == null || accepted.isEmpty) return;
       await widget.repository.addGoalActions(goal.id, accepted);
       if (mounted) {
+        _refresh();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Добавлено шагов: ${accepted.length}')),
         );
@@ -332,6 +337,512 @@ class _GoalsScreenState extends State<GoalsScreen> {
     return '$value / $target${goal.unit.isEmpty ? '' : ' ${goal.unit}'}';
   }
 
+  Future<_GoalHeroDetails> _loadGoalHeroDetails(Goal goal) async {
+    final counts = await widget.repository.goalTaskProgress(goal.id);
+    final nextAction = await widget.repository.goalNextActionTitle(goal.id);
+    return (
+      completed: counts.completed,
+      total: counts.total,
+      nextAction: nextAction,
+    );
+  }
+
+  Future<_GoalHeroDetails> _goalDetailsFor(Goal goal) {
+    final cached = _goalDetails[goal.id];
+    if (cached != null) return cached;
+    late final Future<_GoalHeroDetails> future;
+    future = _loadGoalHeroDetails(goal)
+        .catchError((Object error, StackTrace stack) {
+          if (identical(_goalDetails[goal.id], future)) {
+            _goalDetails.remove(goal.id);
+          }
+          Error.throwWithStackTrace(error, stack);
+        });
+    _goalDetails[goal.id] = future;
+    return future;
+  }
+
+  void _retryGoalDetails(String goalId) {
+    setState(() => _goalDetails.remove(goalId));
+  }
+
+  Widget _goalsBanner(int total) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      key: const Key('goal-progress-summary'),
+      margin: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(26),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppTheme.seed.withValues(alpha: .24), AppTheme.surfaceLow],
+        ),
+        border: Border.all(color: AppTheme.seed.withValues(alpha: .30)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [AppTheme.seed, AppTheme.pink],
+              ),
+              borderRadius: BorderRadius.circular(17),
+            ),
+            child: const Icon(Icons.track_changes_rounded, color: Colors.black),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Твой большой курс',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${_primaryGoalIds.length} главных · $total всего',
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: scheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          IconButton.filledTonal(
+            key: const ValueKey('manage-primary-goals'),
+            tooltip: 'Настроить главные цели',
+            onPressed: _selectPrimaryGoals,
+            icon: const Icon(Icons.tune_rounded, color: AppTheme.mint),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _primaryGoalHero(Goal goal) {
+    final scheme = Theme.of(context).colorScheme;
+    return FutureBuilder<_GoalHeroDetails>(
+      key: ValueKey('goal-progress-${goal.id}'),
+      future: _goalDetailsFor(goal),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Container(
+            key: const Key('primary-goal-progress'),
+            margin: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceLow,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.error
+                    .withValues(alpha: .4),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  goal.title,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 6),
+                const Text('Не удалось загрузить прогресс цели'),
+                TextButton.icon(
+                  onPressed: () => _retryGoalDetails(goal.id),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Повторить'),
+                ),
+              ],
+            ),
+          );
+        }
+        if (!snapshot.hasData) {
+          return Container(
+            key: const Key('primary-goal-progress'),
+            margin: const EdgeInsets.only(bottom: 14),
+            height: 208,
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceLow,
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: AppTheme.seed.withValues(alpha: .24)),
+            ),
+            child: const Center(child: CircularProgressIndicator()),
+          );
+        }
+        final details = snapshot.data!;
+        final progress = details.total == 0
+            ? 0.0
+            : details.completed / details.total;
+        final percent = (progress * 100).round();
+        final nextAction = details.nextAction;
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: Container(
+            key: const Key('primary-goal-progress'),
+            margin: const EdgeInsets.only(bottom: 14),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppTheme.seed.withValues(alpha: .27),
+                  AppTheme.surfaceLow,
+                  AppTheme.surfaceLow,
+                ],
+              ),
+              border: Border.all(color: AppTheme.seed.withValues(alpha: .42)),
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.seed.withValues(alpha: .12),
+                  blurRadius: 28,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Stack(
+              children: [
+                Positioned(
+                  top: -50,
+                  right: -40,
+                  child: Container(
+                    width: 150,
+                    height: 150,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          AppTheme.mint.withValues(alpha: .17),
+                          AppTheme.mint.withValues(alpha: 0),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.flag_rounded,
+                            color: AppTheme.mint,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 7),
+                          Text(
+                            'ГЛАВНАЯ ЦЕЛЬ',
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(
+                                  color: AppTheme.mint,
+                                  letterSpacing: 1.1,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            key: const ValueKey(
+                              'manage-primary-goals-from-hero',
+                            ),
+                            tooltip: 'Настроить главные цели',
+                            onPressed: _selectPrimaryGoals,
+                            icon: const Icon(Icons.tune_rounded),
+                            color: scheme.onSurfaceVariant,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ],
+                      ),
+                      Text(
+                        goal.title,
+                        key: const Key('primary-goal-title'),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          SizedBox.square(
+                            dimension: 88,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                CircularProgressIndicator(
+                                  key: const Key('goal-task-progress'),
+                                  value: progress,
+                                  strokeWidth: 8,
+                                  strokeCap: StrokeCap.round,
+                                  backgroundColor: scheme.surfaceContainerHigh,
+                                  color: AppTheme.mint,
+                                  semanticsLabel:
+                                      '$percent процентов шагов цели выполнено',
+                                ),
+                                Text(
+                                  '$percent%',
+                                  style: Theme.of(context).textTheme.titleLarge
+                                      ?.copyWith(
+                                        color: AppTheme.mint,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${details.completed} из ${details.total} шагов выполнено',
+                                  style: Theme.of(context).textTheme.titleSmall
+                                      ?.copyWith(fontWeight: FontWeight.w800),
+                                ),
+                                const SizedBox(height: 8),
+                                if (nextAction != null) ...[
+                                  Text(
+                                    'Следующий шаг',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelMedium
+                                        ?.copyWith(color: AppTheme.coral),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    nextAction,
+                                    key: const Key('goal-next-action'),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ] else
+                                  Text(
+                                    details.total == 0
+                                        ? 'Добавьте шаг, чтобы видеть прогресс'
+                                        : 'Все шаги выполнены',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: scheme.onSurfaceVariant,
+                                        ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          FilledButton.tonalIcon(
+                            key: ValueKey('goal-ai-steps-${goal.id}'),
+                            onPressed: _aiLoading
+                                ? null
+                                : () => _generateSteps(goal),
+                            icon: const Icon(Icons.auto_awesome_rounded),
+                            label: const Text('Предложить шаги'),
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(0, 46),
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            key: ValueKey('goal-metric-progress-${goal.id}'),
+                            onPressed: () => _updateProgress(goal),
+                            icon: const Icon(Icons.insights_rounded, size: 18),
+                            label: Text('Показатель: ${_progressLabel(goal)}'),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, 46),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _secondaryPrimaryGoal(Goal goal) {
+    final scheme = Theme.of(context).colorScheme;
+    return FutureBuilder<_GoalHeroDetails>(
+      key: ValueKey('goal-progress-${goal.id}'),
+      future: _goalDetailsFor(goal),
+      builder: (context, snapshot) {
+        final details = snapshot.data;
+        final progress = details == null || details.total == 0
+            ? 0.0
+            : details.completed / details.total;
+        return Container(
+          margin: const EdgeInsets.only(bottom: 9),
+          padding: const EdgeInsets.fromLTRB(14, 13, 14, 12),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceLow,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppTheme.mint.withValues(alpha: .24)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.flag_rounded,
+                    color: AppTheme.mint,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      goal.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ),
+                  Text(
+                    snapshot.hasError
+                        ? '—'
+                        : details == null
+                        ? '…'
+                        : '${details.completed}/${details.total}',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: snapshot.hasError
+                          ? scheme.onSurfaceVariant
+                          : AppTheme.mint,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (snapshot.hasError)
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Прогресс недоступен',
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: scheme.error),
+                      ),
+                    ),
+                    IconButton(
+                      key: ValueKey('retry-primary-goal-${goal.id}'),
+                      tooltip: 'Повторить загрузку прогресса',
+                      onPressed: () => _retryGoalDetails(goal.id),
+                      icon: const Icon(Icons.refresh_rounded),
+                      color: AppTheme.coral,
+                    ),
+                  ],
+                )
+              else
+                LinearProgressIndicator(
+                  key: const Key('goal-task-progress'),
+                  value: details == null ? null : progress,
+                  minHeight: 6,
+                  borderRadius: BorderRadius.circular(6),
+                  backgroundColor: scheme.surfaceContainerHigh,
+                  color: AppTheme.mint,
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _goalCard(Goal goal) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      key: ValueKey('goal-card-${goal.id}'),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(14, 13, 10, 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(21),
+        color: AppTheme.surfaceLow,
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: .6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 39,
+                height: 39,
+                decoration: BoxDecoration(
+                  color: AppTheme.coral.withValues(alpha: .13),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.flag_outlined, color: AppTheme.coral),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      goal.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Личный показатель · ${_progressLabel(goal)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall
+                          ?.copyWith(color: scheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 2,
+            runSpacing: 0,
+            children: [
+              TextButton.icon(
+                key: ValueKey('goal-ai-steps-${goal.id}'),
+                onPressed: _aiLoading ? null : () => _generateSteps(goal),
+                icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                label: const Text('Шаги от ИИ'),
+              ),
+              TextButton.icon(
+                key: ValueKey('primary-goal-select-${goal.id}'),
+                onPressed: () => _setPrimary(goal),
+                icon: const Icon(Icons.flag_rounded, size: 18),
+                label: const Text('Сделать главной'),
+              ),
+              IconButton(
+                tooltip: 'Изменить показатель',
+                onPressed: () => _updateProgress(goal),
+                icon: const Icon(Icons.insights_rounded),
+                color: AppTheme.coral,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -346,237 +857,114 @@ class _GoalsScreenState extends State<GoalsScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.data!.isEmpty) {
-            return const Center(
-              child: Text('Добавьте цель, которую хотите видеть в прогрессе.'),
-            );
-          }
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Container(
-                key: const Key('goal-progress-summary'),
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF282044), Color(0xFF151820)],
-                  ),
-                  border: Border.all(
-                    color: AppTheme.seed.withValues(alpha: .4),
-                  ),
-                ),
-                child: Row(
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      width: 48,
-                      height: 48,
+                      width: 76,
+                      height: 76,
                       decoration: BoxDecoration(
-                        color: AppTheme.seed.withValues(alpha: .18),
-                        borderRadius: BorderRadius.circular(16),
+                        gradient: const LinearGradient(
+                          colors: [AppTheme.seed, AppTheme.pink],
+                        ),
+                        borderRadius: BorderRadius.circular(26),
                       ),
                       child: const Icon(
-                        Icons.track_changes_rounded,
-                        color: Color(0xFFC6B4FF),
+                        Icons.flag_rounded,
+                        color: Colors.black,
+                        size: 34,
                       ),
                     ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Твои ориентиры',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            '${_primaryGoalIds.length} главных · путь складывается из шагов',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: const Color(0xFFB7B6C4)),
-                          ),
-                        ],
+                    const SizedBox(height: 18),
+                    Text(
+                      'Всё начинается с цели',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 7),
+                    Text(
+                      'Добавь ориентир, разбей путь на шаги и следи за прогрессом.',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
-                    IconButton(
-                      key: const ValueKey('manage-primary-goals'),
-                      tooltip: 'Настроить главные цели',
-                      onPressed: _selectPrimaryGoals,
-                      icon: const Icon(
-                        Icons.tune_rounded,
-                        color: AppTheme.mint,
-                      ),
+                    const SizedBox(height: 15),
+                    FilledButton.icon(
+                      key: const ValueKey('empty-goals-add'),
+                      onPressed: _addGoal,
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Добавить цель'),
                     ),
                   ],
                 ),
               ),
-              if (_primaryGoalIds.isEmpty)
+            );
+          }
+          final goals = snapshot.data!;
+          final primaryGoals = goals
+              .where((goal) => _primaryGoalIds.contains(goal.id))
+              .toList();
+          final otherGoals = goals
+              .where((goal) => !_primaryGoalIds.contains(goal.id))
+              .toList();
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
+            children: [
+              _goalsBanner(goals.length),
+              if (primaryGoals.isEmpty)
                 Card(
-                  child: ListTile(
-                    key: const ValueKey('select-primary-goal'),
-                    leading: const Icon(Icons.flag_rounded),
-                    title: const Text('Выбрать главную цель'),
-                    onTap: _selectPrimaryGoal,
-                  ),
-                ),
-              for (final primary in snapshot.data!.where(
-                (goal) => _primaryGoalIds.contains(goal.id),
-              ))
-                FutureBuilder<({int completed, int total})>(
-                  key: ValueKey('goal-progress-${primary.id}'),
-                  future: widget.repository.goalTaskProgress(primary.id),
-                  builder: (context, counts) {
-                    final value = counts.data;
-                    final total = value?.total ?? 0;
-                    final progress = total == 0
-                        ? 0.0
-                        : (value!.completed / total);
-                    return Container(
-                      key: const Key('primary-goal-progress'),
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(24),
-                        color: const Color(0xFF171820),
-                        border: Border.all(
-                          color: AppTheme.mint.withValues(alpha: .3),
+                  key: const ValueKey('select-primary-goal'),
+                  color: AppTheme.surfaceLow,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.flag_rounded, color: AppTheme.mint),
+                        const SizedBox(height: 7),
+                        Text(
+                          'Выбери цель, которая сейчас важнее всего',
+                          style: Theme.of(context).textTheme.titleSmall,
                         ),
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.zero,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Главная цель',
-                              style: Theme.of(context).textTheme.labelLarge
-                                  ?.copyWith(
-                                    color: AppTheme.mint,
-                                    letterSpacing: .5,
-                                  ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              primary.title,
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                            const SizedBox(height: 12),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: LinearProgressIndicator(
-                                key: const Key('goal-task-progress'),
-                                value: progress,
-                                minHeight: 9,
-                                backgroundColor: const Color(0xFF30313B),
-                                color: AppTheme.mint,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              '${value?.completed ?? 0} из $total шагов выполнено',
-                            ),
-                            if (total == 0) ...[
-                              const SizedBox(height: 4),
-                              const Text('Добавьте шаг, чтобы видеть прогресс'),
-                            ],
-                          ],
+                        const SizedBox(height: 8),
+                        FilledButton.tonalIcon(
+                          onPressed: _selectPrimaryGoal,
+                          icon: const Icon(Icons.near_me_rounded),
+                          label: const Text('Выбрать главную'),
                         ),
-                      ),
-                    );
-                  },
-                ),
-              ...snapshot.data!.map((goal) {
-                final isPrimary = _primaryGoalIds.contains(goal.id);
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(22),
-                    color: const Color(0xFF14151B),
-                    border: Border.all(
-                      color: isPrimary
-                          ? AppTheme.seed.withValues(alpha: .55)
-                          : const Color(0xFF292A34),
+                      ],
                     ),
                   ),
-                  child: Column(
+                ),
+              if (primaryGoals.isNotEmpty) ...[
+                _primaryGoalHero(primaryGoals.first),
+                for (final goal in primaryGoals.skip(1))
+                  _secondaryPrimaryGoal(goal),
+              ],
+              if (otherGoals.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.only(top: 12, bottom: 9),
+                  child: Row(
                     children: [
-                      ListTile(
-                        title: Text(goal.title),
-                        subtitle: Text(
-                          isPrimary
-                              ? 'Главная · шаги: ${_progressLabel(goal)}'
-                              : _progressLabel(goal),
-                        ),
-                        trailing: FutureBuilder<({int completed, int total})>(
-                          future: widget.repository.goalTaskProgress(goal.id),
-                          builder: (context, counts) {
-                            final value = counts.data;
-                            final total = value?.total ?? 0;
-                            final taskProgress = total == 0
-                                ? 0.0
-                                : value!.completed / total;
-                            return Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (isPrimary)
-                                  SizedBox(
-                                    width: 38,
-                                    height: 38,
-                                    child: CircularProgressIndicator(
-                                      value: taskProgress,
-                                      strokeWidth: 4,
-                                    ),
-                                  ),
-                                IconButton(
-                                  tooltip: 'Сделать главной целью',
-                                  onPressed: () => _setPrimary(goal),
-                                  icon: Icon(
-                                    isPrimary
-                                        ? Icons.star_rounded
-                                        : Icons.star_outline_rounded,
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
+                      Text(
+                        'Ещё цели',
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      OverflowBar(
-                        alignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton.icon(
-                            key: ValueKey('goal-ai-steps-${goal.id}'),
-                            onPressed: _aiLoading
-                                ? null
-                                : () => _generateSteps(goal),
-                            icon: const Icon(Icons.auto_awesome_rounded),
-                            label: const Text('Шаги от ИИ'),
-                          ),
-                          TextButton.icon(
-                            key: ValueKey('primary-goal-select-${goal.id}'),
-                            onPressed: () => _setPrimary(goal),
-                            icon: Icon(
-                              isPrimary
-                                  ? Icons.star_rounded
-                                  : Icons.flag_rounded,
-                            ),
-                            label: Text(
-                              isPrimary ? 'Главная' : 'Сделать главной',
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: 'Обновить прогресс',
-                            onPressed: () => _updateProgress(goal),
-                            icon: const Icon(Icons.tune_rounded),
-                          ),
-                        ],
+                      const SizedBox(width: 8),
+                      Text(
+                        '${otherGoals.length}',
+                        style: Theme.of(context).textTheme.labelLarge
+                            ?.copyWith(color: AppTheme.coral),
                       ),
                     ],
                   ),
-                );
-              }),
+                ),
+                for (final goal in otherGoals) _goalCard(goal),
+              ],
             ],
           );
         },

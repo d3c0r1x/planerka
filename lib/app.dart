@@ -709,12 +709,15 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                 ),
                 onReviewMissed: _openMissedTaskReview,
               ),
-              InboxScreen(
-                key: ValueKey(_inboxVersion),
-                repository: InboxRepository(widget.database!),
-                ai: _localAiService(),
-                onModelRequired: _openModelScreen,
-                onAiSettingsRequired: _openAiSettings,
+              Builder(
+                builder: (inboxContext) => InboxScreen(
+                  key: ValueKey(_inboxVersion),
+                  repository: InboxRepository(widget.database!),
+                  onQuickCapture: () => _showQuickCapture(inboxContext),
+                  ai: _localAiService(),
+                  onModelRequired: _openModelScreen,
+                  onAiSettingsRequired: _openAiSettings,
+                ),
               ),
               FocusScreen(
                 engine: TimerEngine(TimerRepository(widget.database!)),

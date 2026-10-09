@@ -12,12 +12,14 @@ class InboxScreen extends StatefulWidget {
   const InboxScreen({
     super.key,
     required this.repository,
+    this.onQuickCapture,
     this.ai,
     this.onModelRequired,
     this.onAiSettingsRequired,
   });
 
   final InboxRepository repository;
+  final VoidCallback? onQuickCapture;
   final AiRecommendationService? ai;
   final VoidCallback? onModelRequired;
   final VoidCallback? onAiSettingsRequired;
@@ -388,6 +390,22 @@ class _InboxScreenState extends State<InboxScreen> {
             style: Theme.of(context).textTheme.bodyMedium
                 ?.copyWith(color: scheme.onSurfaceVariant, height: 1.35),
           ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              key: const Key('inbox-capture'),
+              onPressed: widget.onQuickCapture,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Записать задачу'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+                backgroundColor: AppTheme.seed,
+                foregroundColor: const Color(0xFF15111F),
+                textStyle: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -532,6 +550,34 @@ class _InboxScreenState extends State<InboxScreen> {
               color: scheme.outlineVariant.withValues(alpha: .35),
             ),
             const SizedBox(height: 5),
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: [
+                _triageChip(
+                  key: const Key('inbox-triage-quick'),
+                  label: 'Сделать быстро',
+                  icon: Icons.bolt_rounded,
+                  color: AppTheme.mint,
+                  onPressed: () => _triage(entry, TaskDisposition.quick),
+                ),
+                _triageChip(
+                  key: const Key('inbox-triage-planned'),
+                  label: 'Запланировать',
+                  icon: Icons.calendar_month_rounded,
+                  color: AppTheme.seed,
+                  onPressed: () => _triage(entry, TaskDisposition.planned),
+                ),
+                _triageChip(
+                  key: const Key('inbox-triage-project'),
+                  label: 'Большой проект',
+                  icon: Icons.rocket_launch_rounded,
+                  color: AppTheme.coral,
+                  onPressed: () => _triage(entry, TaskDisposition.project),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
             Row(
               children: [
                 _entryAction(
@@ -555,17 +601,16 @@ class _InboxScreenState extends State<InboxScreen> {
                 ),
                 const Spacer(),
                 PopupMenuButton<TaskDisposition>(
-                  tooltip: 'Разобрать',
-                  icon: const Icon(Icons.sell_rounded, color: AppTheme.seed),
+                  key: ValueKey('inbox-more-${entry.id}'),
+                  tooltip: 'Другие действия',
+                  icon: const Icon(Icons.more_horiz_rounded),
                   onSelected: (disposition) => _triage(entry, disposition),
-                  itemBuilder: (context) => TaskDisposition.values
-                      .map(
-                        (disposition) => PopupMenuItem(
-                          value: disposition,
-                          child: Text(dispositionLabel(disposition)),
-                        ),
-                      )
-                      .toList(),
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: TaskDisposition.deleted,
+                      child: Text(dispositionLabel(TaskDisposition.deleted)),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -589,6 +634,22 @@ class _InboxScreenState extends State<InboxScreen> {
       backgroundColor: color.withValues(alpha: .10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
     ),
+    onPressed: onPressed,
+  );
+
+  Widget _triageChip({
+    required Key key,
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+  }) => ActionChip(
+    key: key,
+    avatar: Icon(icon, size: 17, color: color),
+    label: Text(label),
+    labelStyle: TextStyle(color: color, fontWeight: FontWeight.w700),
+    backgroundColor: color.withValues(alpha: .10),
+    side: BorderSide(color: color.withValues(alpha: .24)),
     onPressed: onPressed,
   );
 }
