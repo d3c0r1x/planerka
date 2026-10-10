@@ -200,7 +200,7 @@ class _InboxScreenState extends State<InboxScreen> {
         context: context,
         builder: (context) => StatefulBuilder(
           builder: (context, update) => AlertDialog(
-            title: const Text('Разбор Inbox от ИИ'),
+            title: const Text('Разбор входящих от ИИ'),
             content: SizedBox(
               width: double.maxFinite,
               child: ListView(
@@ -246,7 +246,7 @@ class _InboxScreenState extends State<InboxScreen> {
       await ai.applyInboxSelected(suggestion, accepted);
       if (mounted) _refresh();
     } catch (error) {
-      _showAiError(error, 'ИИ не смог разобрать Inbox');
+      _showAiError(error, 'ИИ не смог разобрать входящие');
     } finally {
       if (mounted) setState(() => _aiLoading = false);
     }
@@ -283,7 +283,7 @@ class _InboxScreenState extends State<InboxScreen> {
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Center(
-            child: Text('Не удалось открыть Inbox: ${snapshot.error}'),
+            child: Text('Не удалось открыть входящие: ${snapshot.error}'),
           );
         }
         if (!snapshot.hasData) {
@@ -292,13 +292,21 @@ class _InboxScreenState extends State<InboxScreen> {
         final entries = snapshot.data!;
         return ListView.separated(
           padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
-          itemCount: entries.length + 1 + (widget.ai == null ? 0 : 1),
+          itemCount:
+              entries.length +
+              1 +
+              (widget.ai == null ? 0 : 1) +
+              (entries.isEmpty ? 1 : 0),
           separatorBuilder: (context, index) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
             if (index == 0) return _inboxHero(entries.length);
             final aiIndex = widget.ai == null ? -1 : 1;
             if (index == aiIndex) {
               return _aiTriageCard();
+            }
+            final emptyGuideIndex = widget.ai == null ? 1 : 2;
+            if (entries.isEmpty && index == emptyGuideIndex) {
+              return _emptyTriageGuide();
             }
             final entryIndex = index - (widget.ai == null ? 1 : 2);
             if (entryIndex < 0 || entryIndex >= entries.length) {
@@ -411,6 +419,65 @@ class _InboxScreenState extends State<InboxScreen> {
     );
   }
 
+  Widget _emptyTriageGuide() {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      key: const Key('inbox-empty-triage-guide'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceLow,
+        borderRadius: BorderRadius.circular(23),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: .36)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Выберешь маршрут',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 3),
+          Text(
+            'После записи решишь, что делать с задачей.',
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _InboxRouteHint(
+                  title: 'Быстро',
+                  subtitle: 'Сегодня',
+                  icon: Icons.bolt_rounded,
+                  color: AppTheme.coral,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _InboxRouteHint(
+                  title: 'Срок',
+                  subtitle: 'Выбери дату',
+                  icon: Icons.event_available_rounded,
+                  color: AppTheme.mint,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _InboxRouteHint(
+                  title: 'Проект',
+                  subtitle: 'Разбей на шаги',
+                  icon: Icons.account_tree_rounded,
+                  color: AppTheme.seed,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   String _thoughtWord(int count) {
     final lastTwo = count % 100;
     if (lastTwo >= 11 && lastTwo <= 14) return 'мыслей';
@@ -486,99 +553,86 @@ class _InboxScreenState extends State<InboxScreen> {
     return Card(
       key: ValueKey('inbox-entry-${entry.id}'),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(15, 14, 12, 10),
+        padding: const EdgeInsets.fromLTRB(13, 12, 10, 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
-                  width: 38,
-                  height: 38,
+                  width: 36,
+                  height: 36,
                   decoration: BoxDecoration(
                     color: AppTheme.mint.withValues(alpha: .14),
-                    borderRadius: BorderRadius.circular(13),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(Icons.bolt_rounded, color: AppTheme.mint),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 1),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          entry.title,
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Выбери, что делать дальше',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: scheme.onSurfaceVariant),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.coral.withValues(alpha: .12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    'НОВОЕ',
-                    style: TextStyle(
-                      color: AppTheme.coral,
-                      fontSize: 10,
-                      letterSpacing: .5,
-                      fontWeight: FontWeight.w800,
-                    ),
+                  child: Text(
+                    entry.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w800),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 9),
-            Divider(
-              height: 1,
-              color: scheme.outlineVariant.withValues(alpha: .35),
-            ),
-            const SizedBox(height: 5),
+            const SizedBox(height: 7),
             Wrap(
-              spacing: 7,
-              runSpacing: 7,
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                _inboxBadge(
+                  key: const Key('inbox-entry-type'),
+                  label: 'На разборе',
+                  color: AppTheme.mint,
+                ),
+                _inboxBadge(
+                  key: const Key('inbox-entry-priority'),
+                  label: 'Без приоритета',
+                  tooltip: 'Приоритет не задан',
+                  color: scheme.onSurfaceVariant,
+                ),
+              ],
+            ),
+            const SizedBox(height: 7),
+            Row(
               children: [
                 _triageChip(
                   key: const Key('inbox-triage-quick'),
                   label: 'Сделать быстро',
+                  displayLabel: 'Быстро',
                   icon: Icons.bolt_rounded,
                   color: AppTheme.mint,
                   onPressed: () => _triage(entry, TaskDisposition.quick),
                 ),
+                const SizedBox(width: 6),
                 _triageChip(
                   key: const Key('inbox-triage-planned'),
                   label: 'Запланировать',
+                  displayLabel: 'Срок',
                   icon: Icons.calendar_month_rounded,
                   color: AppTheme.seed,
                   onPressed: () => _triage(entry, TaskDisposition.planned),
                 ),
+                const SizedBox(width: 6),
                 _triageChip(
                   key: const Key('inbox-triage-project'),
                   label: 'Большой проект',
+                  displayLabel: 'Проект',
                   icon: Icons.rocket_launch_rounded,
                   color: AppTheme.coral,
                   onPressed: () => _triage(entry, TaskDisposition.project),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 _entryAction(
                   tooltip: 'Связать с целью',
@@ -637,19 +691,136 @@ class _InboxScreenState extends State<InboxScreen> {
     onPressed: onPressed,
   );
 
+  Widget _inboxBadge({
+    required Key key,
+    required String label,
+    String? tooltip,
+    required Color color,
+  }) => Tooltip(
+    message: tooltip ?? label,
+    child: Container(
+      key: key,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: .20)),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall
+            ?.copyWith(color: color, fontWeight: FontWeight.w700),
+      ),
+    ),
+  );
+
   Widget _triageChip({
     required Key key,
     required String label,
+    required String displayLabel,
     required IconData icon,
     required Color color,
     required VoidCallback onPressed,
-  }) => ActionChip(
-    key: key,
-    avatar: Icon(icon, size: 17, color: color),
-    label: Text(label),
-    labelStyle: TextStyle(color: color, fontWeight: FontWeight.w700),
-    backgroundColor: color.withValues(alpha: .10),
-    side: BorderSide(color: color.withValues(alpha: .24)),
-    onPressed: onPressed,
+  }) => Expanded(
+    child: Tooltip(
+      message: label,
+      child: Semantics(
+        key: key,
+        label: label,
+        button: true,
+        onTap: onPressed,
+        child: Material(
+          color: color.withValues(alpha: .10),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(13),
+            side: BorderSide(color: color.withValues(alpha: .24)),
+          ),
+          child: InkWell(
+            excludeFromSemantics: true,
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(13),
+            child: SizedBox(
+              height: 42,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 15, color: color),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          displayLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: color,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _InboxRouteHint extends StatelessWidget {
+  const _InboxRouteHint({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: .09),
+      borderRadius: BorderRadius.circular(17),
+      border: Border.all(color: color.withValues(alpha: .22)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(height: 6),
+        Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          subtitle,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontSize: 9,
+            height: 1.15,
+          ),
+        ),
+      ],
+    ),
   );
 }

@@ -26,7 +26,7 @@ void main() {
         'created_at': '2026-10-08T09:00:00.000Z',
         'updated_at': '2026-10-08T09:00:00.000Z',
       });
-      final repo = PlanningRepository(db);
+      final repo = PlanningRepository(db, now: () => DateTime(2026, 10, 8, 9));
       await repo.setScheduleBlock('t1', DateTime(2026, 10, 9, 10), 45);
       var row = (await db.database.query('tasks')).single;
       expect(row['scheduled_at'], isNotNull);

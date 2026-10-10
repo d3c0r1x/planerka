@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -14,6 +13,7 @@ import '../ai/model/model_store.dart';
 import '../planning/planning_repository.dart';
 
 typedef _GoalHeroDetails = ({int completed, int total, String? nextAction});
+typedef _GoalsOverview = ({List<Goal> goals, Set<String> primaryGoalIds});
 
 class GoalsScreen extends StatefulWidget {
   const GoalsScreen({
@@ -34,31 +34,33 @@ class GoalsScreen extends StatefulWidget {
 }
 
 class _GoalsScreenState extends State<GoalsScreen> {
-  late Future<List<Goal>> _goals;
+  late Future<_GoalsOverview> _goals;
   bool _aiLoading = false;
   Set<String> _primaryGoalIds = {};
   final Map<String, Future<_GoalHeroDetails>> _goalDetails = {};
+  final Map<String, int> _goalDetailRevisions = {};
 
   @override
   void initState() {
     super.initState();
-    _goals = widget.repository.listGoals();
-    unawaited(_loadPrimary());
+    _goals = _loadGoals();
   }
 
   void _refresh() {
     _goalDetails.clear();
     setState(() {
-      _goals = widget.repository.listGoals();
+      _goals = _loadGoals();
     });
-    unawaited(_loadPrimary());
   }
 
-  Future<void> _loadPrimary() async {
-    final goals = await widget.repository.primaryGoals();
+  Future<_GoalsOverview> _loadGoals() async {
+    final goals = await widget.repository.listGoals();
+    final primaryGoals = await widget.repository.primaryGoals();
+    final primaryGoalIds = primaryGoals.map((goal) => goal.id).toSet();
     if (mounted) {
-      setState(() => _primaryGoalIds = goals.map((goal) => goal.id).toSet());
+      setState(() => _primaryGoalIds = primaryGoalIds);
     }
+    return (goals: goals, primaryGoalIds: primaryGoalIds);
   }
 
   Future<void> _setPrimary(Goal goal) async {
@@ -350,23 +352,23 @@ class _GoalsScreenState extends State<GoalsScreen> {
   Future<_GoalHeroDetails> _goalDetailsFor(Goal goal) {
     final cached = _goalDetails[goal.id];
     if (cached != null) return cached;
-    late final Future<_GoalHeroDetails> future;
-    future = _loadGoalHeroDetails(goal)
-        .catchError((Object error, StackTrace stack) {
-          if (identical(_goalDetails[goal.id], future)) {
-            _goalDetails.remove(goal.id);
-          }
-          Error.throwWithStackTrace(error, stack);
-        });
+    final future = _loadGoalHeroDetails(goal);
     _goalDetails[goal.id] = future;
     return future;
   }
 
   void _retryGoalDetails(String goalId) {
-    setState(() => _goalDetails.remove(goalId));
+    setState(() {
+      _goalDetails.remove(goalId);
+      _goalDetailRevisions.update(
+        goalId,
+        (revision) => revision + 1,
+        ifAbsent: () => 1,
+      );
+    });
   }
 
-  Widget _goalsBanner(int total) {
+  Widget _goalsBanner(int total, int primaryCount) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       key: const Key('goal-progress-summary'),
@@ -405,7 +407,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '${_primaryGoalIds.length} главных · $total всего',
+                  '$primaryCount главных · $total всего',
                   style: Theme.of(context).textTheme.bodySmall
                       ?.copyWith(color: scheme.onSurfaceVariant),
                 ),
@@ -426,7 +428,9 @@ class _GoalsScreenState extends State<GoalsScreen> {
   Widget _primaryGoalHero(Goal goal) {
     final scheme = Theme.of(context).colorScheme;
     return FutureBuilder<_GoalHeroDetails>(
-      key: ValueKey('goal-progress-${goal.id}'),
+      key: ValueKey(
+        'goal-progress-${goal.id}-${_goalDetailRevisions[goal.id] ?? 0}',
+      ),
       future: _goalDetailsFor(goal),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
@@ -679,7 +683,9 @@ class _GoalsScreenState extends State<GoalsScreen> {
   Widget _secondaryPrimaryGoal(Goal goal) {
     final scheme = Theme.of(context).colorScheme;
     return FutureBuilder<_GoalHeroDetails>(
-      key: ValueKey('goal-progress-${goal.id}'),
+      key: ValueKey(
+        'goal-progress-${goal.id}-${_goalDetailRevisions[goal.id] ?? 0}',
+      ),
       future: _goalDetailsFor(goal),
       builder: (context, snapshot) {
         final details = snapshot.data;
@@ -843,11 +849,66 @@ class _GoalsScreenState extends State<GoalsScreen> {
     );
   }
 
+  Widget _addGoalAction() {
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.only(top: 6, bottom: 14),
+      child: Center(
+        heightFactor: 1,
+        child: Semantics(
+          key: const ValueKey('goals-add-action'),
+          label: 'Добавить цель',
+          button: true,
+          onTap: _addGoal,
+          child: Tooltip(
+            message: 'Добавить цель',
+            child: Material(
+              color: Colors.transparent,
+              shape: const CircleBorder(),
+              child: Ink(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [AppTheme.seed, AppTheme.pink, AppTheme.coral],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.pink.withValues(alpha: .32),
+                      blurRadius: 26,
+                      spreadRadius: 1,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: InkWell(
+                  onTap: _addGoal,
+                  customBorder: const CircleBorder(),
+                  child: const SizedBox.square(
+                    dimension: 68,
+                    child: Center(
+                      child: Icon(
+                        Icons.add_rounded,
+                        color: Colors.black,
+                        size: 34,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Цели')),
-      body: FutureBuilder<List<Goal>>(
+      body: FutureBuilder<_GoalsOverview>(
         future: _goals,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
@@ -856,7 +917,8 @@ class _GoalsScreenState extends State<GoalsScreen> {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (snapshot.data!.isEmpty) {
+          final overview = snapshot.data!;
+          if (overview.goals.isEmpty) {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(32),
@@ -904,17 +966,18 @@ class _GoalsScreenState extends State<GoalsScreen> {
               ),
             );
           }
-          final goals = snapshot.data!;
+          final goals = overview.goals;
+          final primaryGoalIds = overview.primaryGoalIds;
           final primaryGoals = goals
-              .where((goal) => _primaryGoalIds.contains(goal.id))
+              .where((goal) => primaryGoalIds.contains(goal.id))
               .toList();
           final otherGoals = goals
-              .where((goal) => !_primaryGoalIds.contains(goal.id))
+              .where((goal) => !primaryGoalIds.contains(goal.id))
               .toList();
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
             children: [
-              _goalsBanner(goals.length),
+              _goalsBanner(goals.length, primaryGoalIds.length),
               if (primaryGoals.isEmpty)
                 Card(
                   key: const ValueKey('select-primary-goal'),
@@ -969,11 +1032,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        tooltip: 'Добавить цель',
-        onPressed: _addGoal,
-        child: const Icon(Icons.add_rounded),
-      ),
+      bottomNavigationBar: _addGoalAction(),
     );
   }
 }

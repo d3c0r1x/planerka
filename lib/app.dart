@@ -18,6 +18,7 @@ import 'features/ai/model/model_screen.dart';
 import 'features/ai/model/model_manifest.dart';
 import 'features/ai/model/model_store.dart';
 import 'features/ai/model/local_ai_engine.dart';
+import 'features/ai/model/local_ai_screen.dart';
 import 'features/ai/model/model_downloader.dart';
 import 'features/ai/planning/ai_recommendation_service.dart';
 import 'features/ai/ai_provider_router.dart';
@@ -78,43 +79,103 @@ class _NavGlyph extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.selected,
-    this.horizontalOffset = 0,
   });
 
   final IconData icon;
   final Color color;
   final bool selected;
-  final double horizontalOffset;
 
   @override
-  Widget build(BuildContext context) => Transform.translate(
-    offset: Offset(horizontalOffset, 0),
-    child: AnimatedContainer(
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : const Duration(milliseconds: 200),
-      curve: Curves.easeOutCubic,
-      width: 42,
-      height: 34,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            color.withValues(alpha: selected ? .3 : .06),
-            color.withValues(alpha: selected ? .12 : .02),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: color.withValues(alpha: selected ? .58 : .12),
-          width: selected ? 1 : .7,
-        ),
-        boxShadow: selected
-            ? [BoxShadow(color: color.withValues(alpha: .12), blurRadius: 14)]
-            : null,
+  Widget build(BuildContext context) => AnimatedContainer(
+    duration: MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 200),
+    curve: Curves.easeOutCubic,
+    width: 42,
+    height: 34,
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          color.withValues(alpha: selected ? .3 : .06),
+          color.withValues(alpha: selected ? .12 : .02),
+        ],
       ),
-      child: Icon(icon, color: color, size: selected ? 23 : 21),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: color.withValues(alpha: selected ? .58 : .12),
+        width: selected ? 1 : .7,
+      ),
+      boxShadow: selected
+          ? [BoxShadow(color: color.withValues(alpha: .12), blurRadius: 14)]
+          : null,
+    ),
+    child: Icon(icon, color: color, size: selected ? 23 : 21),
+  );
+}
+
+class _DockDestination extends StatelessWidget {
+  const _DockDestination({
+    required this.semanticKey,
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Key semanticKey;
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: Semantics(
+      key: semanticKey,
+      label: label,
+      selected: selected,
+      button: true,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: label,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(22),
+          child: SizedBox(
+            height: 70,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _NavGlyph(icon: icon, color: color, selected: selected),
+                const SizedBox(height: 5),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        color: selected
+                            ? Colors.white
+                            : const Color(0xFFB7B6C4),
+                        fontSize: 11,
+                        fontWeight: selected
+                            ? FontWeight.w800
+                            : FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     ),
   );
 }
@@ -384,6 +445,51 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _openHomeAiPlanning() async {
+    final database = widget.database;
+    final store = _modelStore;
+    final recommendations = _localAiService();
+    if (database == null) return;
+    if (store == null || recommendations == null) {
+      _openModelScreen();
+      return;
+    }
+    try {
+      final modelPath = await store.verifiedModel(Qwen3ModelManifest.manifest);
+      if (!mounted) return;
+      if (modelPath == null) {
+        _openModelScreen();
+        return;
+      }
+      await _navigatorKey.currentState?.push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => LocalAiScreen(
+            engine: LocalAiEngine(
+              store: store,
+              manifest: Qwen3ModelManifest.manifest,
+            ),
+            recommendations: recommendations,
+          ),
+        ),
+      );
+    } catch (_) {
+      if (mounted) _openModelScreen();
+    }
+  }
+
+  void _openGamificationScreen() {
+    final database = widget.database;
+    if (database == null) return;
+    _navigatorKey.currentState?.push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => GamificationScreen(
+          service:
+              widget.gamificationDataSource ?? GamificationService(database),
+        ),
+      ),
+    );
+  }
+
   void _openAiSettings() {
     final database = widget.database;
     if (database == null) return;
@@ -494,12 +600,88 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _showThemePicker(BuildContext context) async {
+    final mode = await showDialog<ThemeMode>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('Цветовая тема'),
+        children: [
+          for (final option in const {
+            ThemeMode.system: 'Как на устройстве',
+            ThemeMode.light: 'Светлая тема',
+            ThemeMode.dark: 'Тёмная тема',
+          }.entries)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialogContext, option.key),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(option.value),
+              ),
+            ),
+        ],
+      ),
+    );
+    if (mode != null && mounted) await _setThemeMode(mode);
+  }
+
+  Future<void> _openSecondaryMenu(BuildContext context) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: .72),
+      builder: (sheetContext) => _SecondaryMenuSheet(
+        sleepEnabled: _sleepEnabled,
+        onSelect: (value) => Navigator.of(sheetContext).pop(value),
+      ),
+    );
+    if (action == null || !mounted || !context.mounted) return;
+    if (action == 'theme') {
+      await _showThemePicker(context);
+      return;
+    }
+    if (action == 'sleep') {
+      await _toggleSleepMode();
+      return;
+    }
+
+    final destination = switch (action) {
+      'goals' => GoalsScreen(
+        repository: PlanningRepository(widget.database!),
+        ai: _localAiService(),
+        onModelRequired: _openModelScreen,
+        onAiSettingsRequired: _openAiSettings,
+      ),
+      'projects' => ProjectsScreen(
+        repository: PlanningRepository(widget.database!),
+      ),
+      'habits' => HabitsScreen(
+        repository: WellbeingRepository(widget.database!),
+      ),
+      'journal' => JournalScreen(
+        repository: WellbeingRepository(widget.database!),
+      ),
+      'model' => ModelScreen(
+        database: widget.database,
+        downloader: _sharedModelDownloader,
+        modelStore: _modelStore,
+        enableBackgroundDownload: true,
+      ),
+      _ => BackupScreen(service: BackupService(widget.database!)),
+    };
+    unawaited(
+      Navigator.of(context)
+          .push(MaterialPageRoute<void>(builder: (_) => destination)),
+    );
+  }
+
   Widget _mainScaffoldBody(BuildContext context) => Scaffold(
     appBar: AppBar(
       title: Text(
         switch (_tab) {
           0 => 'Ритм дня',
-          1 => 'Inbox',
+          1 => 'Входящие',
           2 => 'Фокус',
           _ => 'Прогресс',
         },
@@ -512,25 +694,26 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
         ),
       ),
       actions: [
-        PopupMenuButton<String>(
-          tooltip: 'Цветовая тема',
-          icon: const _ActionGlyph(
-            icon: Icons.palette_rounded,
-            color: Color(0xFFFFC857),
+        if (_tab != 0 || widget.database == null)
+          PopupMenuButton<String>(
+            tooltip: 'Цветовая тема',
+            icon: const _ActionGlyph(
+              icon: Icons.palette_rounded,
+              color: Color(0xFFFFC857),
+            ),
+            onSelected: (value) {
+              final mode = ThemeMode.values.firstWhere(
+                (item) => item.name == value,
+              );
+              unawaited(_setThemeMode(mode));
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(enabled: false, child: Text('Цветовая тема')),
+              PopupMenuItem(value: 'system', child: Text('Как на устройстве')),
+              PopupMenuItem(value: 'light', child: Text('Светлая тема')),
+              PopupMenuItem(value: 'dark', child: Text('Тёмная тема')),
+            ],
           ),
-          onSelected: (value) {
-            final mode = ThemeMode.values.firstWhere(
-              (item) => item.name == value,
-            );
-            unawaited(_setThemeMode(mode));
-          },
-          itemBuilder: (context) => const [
-            PopupMenuItem(enabled: false, child: Text('Цветовая тема')),
-            PopupMenuItem(value: 'system', child: Text('Как на устройстве')),
-            PopupMenuItem(value: 'light', child: Text('Светлая тема')),
-            PopupMenuItem(value: 'dark', child: Text('Тёмная тема')),
-          ],
-        ),
         if (_tab == 3 && widget.database != null)
           IconButton(
             tooltip: 'Игровой прогресс',
@@ -538,15 +721,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
               icon: Icons.emoji_events_rounded,
               color: Color(0xFFFFB84D),
             ),
-            onPressed: () => _navigatorKey.currentState?.push(
-              MaterialPageRoute<void>(
-                builder: (_) => GamificationScreen(
-                  service:
-                      widget.gamificationDataSource ??
-                      GamificationService(widget.database!),
-                ),
-              ),
-            ),
+            onPressed: _openGamificationScreen,
           ),
         if (_tab == 0 && widget.database != null) ...[
           Builder(
@@ -569,94 +744,13 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
           ),
           Builder(
             builder: (context) => IconButton(
-              tooltip: 'Проекты',
-              icon: const _ActionGlyph(
-                icon: Icons.folder_special_rounded,
-                color: Color(0xFFFFAE72),
-              ),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) => ProjectsScreen(
-                    repository: PlanningRepository(widget.database!),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Builder(
-            builder: (context) => IconButton(
-              tooltip: 'Цели',
-              icon: const _ActionGlyph(
-                icon: Icons.flag_rounded,
-                color: Color(0xFFFF7FA8),
-              ),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) => GoalsScreen(
-                    repository: PlanningRepository(widget.database!),
-                    ai: _localAiService(),
-                    onModelRequired: _openModelScreen,
-                    onAiSettingsRequired: _openAiSettings,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Builder(
-            builder: (context) => PopupMenuButton<String>(
+              key: const Key('home-more-button'),
               tooltip: 'Ещё',
               icon: const _ActionGlyph(
-                icon: Icons.auto_awesome_rounded,
+                icon: Icons.more_horiz_rounded,
                 color: Color(0xFFA991FF),
               ),
-              onSelected: (value) {
-                if (value == 'sleep') {
-                  unawaited(_toggleSleepMode());
-                  return;
-                }
-                Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                    builder: (_) => switch (value) {
-                      'habits' => HabitsScreen(
-                        repository: WellbeingRepository(widget.database!),
-                      ),
-                      'journal' => JournalScreen(
-                        repository: WellbeingRepository(widget.database!),
-                      ),
-                      'model' => ModelScreen(
-                        database: widget.database,
-                        downloader: _sharedModelDownloader,
-                        modelStore: _modelStore,
-                        enableBackgroundDownload: true,
-                      ),
-                      _ => BackupScreen(
-                        service: BackupService(widget.database!),
-                      ),
-                    },
-                  ),
-                );
-              },
-              itemBuilder: (context) => [
-                CheckedPopupMenuItem(
-                  key: const Key('sleep-mode-menu-item'),
-                  value: 'sleep',
-                  checked: _sleepEnabled,
-                  child: const Text('Режим сна'),
-                ),
-                const PopupMenuItem(value: 'habits', child: Text('Привычки')),
-                const PopupMenuItem(value: 'journal', child: Text('Дневник')),
-                const PopupMenuItem(
-                  value: 'model',
-                  child: Text('Локальный ИИ'),
-                ),
-                const PopupMenuItem(
-                  value: 'backup',
-                  child: Text('Настройки и резервная копия'),
-                ),
-              ],
+              onPressed: () => unawaited(_openSecondaryMenu(context)),
             ),
           ),
         ],
@@ -693,6 +787,11 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
                   ),
                 ),
                 onQuickCapture: _quickCapture,
+                onAiPlanning: _openHomeAiPlanning,
+                gamification:
+                    widget.gamificationDataSource ??
+                    GamificationService(widget.database!),
+                onGamification: _openGamificationScreen,
                 modelStore: _modelStore,
                 modelDownloader: _sharedModelDownloader,
                 onModel: _openModelScreen,
@@ -736,154 +835,410 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
       child: SafeArea(
         top: false,
         minimum: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-        child: SizedBox(
-          height: 78,
-          child: Stack(
-            alignment: Alignment.topCenter,
-            children: [
-              Positioned.fill(
-                top: 8,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(30),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF101115),
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(color: const Color(0xFF2B2C35)),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x66000000),
-                          blurRadius: 26,
-                          offset: Offset(0, -8),
+        child: Container(
+          key: const Key('app-navigation-dock'),
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFF101115),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: const Color(0xFF2B2C35)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x66000000),
+                blurRadius: 26,
+                offset: Offset(0, -8),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: Row(
+              children: [
+                _DockDestination(
+                  semanticKey: const Key('nav-today'),
+                  label: 'Сегодня',
+                  icon: Icons.wb_sunny_rounded,
+                  color: const Color(0xFFFFC857),
+                  selected: _tab == 0,
+                  onTap: () => _selectTab(0),
+                ),
+                _DockDestination(
+                  semanticKey: const Key('nav-inbox'),
+                  label: 'Входящие',
+                  icon: Icons.inbox_rounded,
+                  color: const Color(0xFF62C9FF),
+                  selected: _tab == 1,
+                  onTap: () => _selectTab(1),
+                ),
+                SizedBox(
+                  width: 64,
+                  height: 70,
+                  child: Center(
+                    child: Builder(
+                      builder: (context) => Semantics(
+                        key: const Key('center-action-button'),
+                        label: 'Записать задачу во входящие',
+                        button: true,
+                        onTap: () => _showQuickCapture(context),
+                        excludeSemantics: true,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Color(0xFFFFE398),
+                                Color(0xFFFFBE48),
+                                Color(0xFFFF9863),
+                              ],
+                            ),
+                            border: Border.all(color: Colors.black, width: 3),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x35FFC857),
+                                blurRadius: 16,
+                              ),
+                            ],
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(3),
+                            child: FloatingActionButton(
+                              heroTag: 'center-quick-capture',
+                              tooltip: 'Добавить задачу',
+                              onPressed: () {
+                                unawaited(HapticFeedback.lightImpact());
+                                unawaited(_showQuickCapture(context));
+                              },
+                              backgroundColor: Colors.transparent,
+                              foregroundColor: const Color(0xFF241700),
+                              elevation: 0,
+                              highlightElevation: 0,
+                              shape: const CircleBorder(),
+                              child: const Icon(Icons.add_rounded, size: 30),
+                            ),
+                          ),
                         ),
-                      ],
-                    ),
-                    child: NavigationBar(
-                      height: 70,
-                      labelBehavior:
-                          NavigationDestinationLabelBehavior.alwaysShow,
-                      indicatorColor: Colors.transparent,
-                      backgroundColor: Colors.transparent,
-                      selectedIndex: _tab,
-                      onDestinationSelected: _selectTab,
-                      destinations: [
-                        NavigationDestination(
-                          key: const ValueKey('nav-today'),
-                          icon: const _NavGlyph(
-                            icon: Icons.wb_sunny_rounded,
-                            color: Color(0xFFFFC857),
-                            selected: false,
-                          ),
-                          selectedIcon: const _NavGlyph(
-                            icon: Icons.wb_sunny_rounded,
-                            color: Color(0xFFFFC857),
-                            selected: true,
-                          ),
-                          label: 'Сегодня',
-                        ),
-                        NavigationDestination(
-                          key: const ValueKey('nav-inbox'),
-                          icon: const _NavGlyph(
-                            icon: Icons.inbox_rounded,
-                            horizontalOffset: -18,
-                            color: Color(0xFF62C9FF),
-                            selected: false,
-                          ),
-                          selectedIcon: const _NavGlyph(
-                            icon: Icons.inbox_rounded,
-                            horizontalOffset: -18,
-                            color: Color(0xFF62C9FF),
-                            selected: true,
-                          ),
-                          label: 'Inbox',
-                        ),
-                        NavigationDestination(
-                          key: const ValueKey('nav-focus'),
-                          icon: const _NavGlyph(
-                            icon: Icons.bolt_rounded,
-                            horizontalOffset: 18,
-                            color: Color(0xFFFF8C69),
-                            selected: false,
-                          ),
-                          selectedIcon: const _NavGlyph(
-                            icon: Icons.bolt_rounded,
-                            horizontalOffset: 18,
-                            color: Color(0xFFFF8C69),
-                            selected: true,
-                          ),
-                          label: 'Фокус',
-                        ),
-                        NavigationDestination(
-                          key: const ValueKey('nav-progress'),
-                          icon: const _NavGlyph(
-                            icon: Icons.auto_graph_rounded,
-                            color: Color(0xFFA991FF),
-                            selected: false,
-                          ),
-                          selectedIcon: const _NavGlyph(
-                            icon: Icons.auto_graph_rounded,
-                            color: Color(0xFFA991FF),
-                            selected: true,
-                          ),
-                          label: 'Прогресс',
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
+                _DockDestination(
+                  semanticKey: const Key('nav-focus'),
+                  label: 'Фокус',
+                  icon: Icons.bolt_rounded,
+                  color: const Color(0xFFFF8C69),
+                  selected: _tab == 2,
+                  onTap: () => _selectTab(2),
+                ),
+                _DockDestination(
+                  semanticKey: const Key('nav-progress'),
+                  label: 'Прогресс',
+                  icon: Icons.auto_graph_rounded,
+                  color: const Color(0xFFA991FF),
+                  selected: _tab == 3,
+                  onTap: () => _selectTab(3),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _SecondaryMenuSheet extends StatelessWidget {
+  const _SecondaryMenuSheet({
+    required this.sleepEnabled,
+    required this.onSelect,
+  });
+
+  final bool sleepEnabled;
+  final ValueChanged<String> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * .86,
+        ),
+        child: Container(
+          key: const Key('home-secondary-menu-sheet'),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF202035), Color(0xFF11151D), Color(0xFF111D21)],
+            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+            border: Border.all(color: AppTheme.seed.withValues(alpha: .28)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x44000000),
+                blurRadius: 28,
+                offset: Offset(0, -8),
               ),
-              Positioned(
-                top: 0,
-                child: Builder(
-                  builder: (context) => Semantics(
-                    key: const Key('center-action-button'),
-                    label: 'Записать задачу в Inbox',
-                    button: true,
-                    onTap: () => _showQuickCapture(context),
-                    excludeSemantics: true,
-                    child: DecoratedBox(
+            ],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(18, 10, 18, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 38,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: scheme.onSurfaceVariant.withValues(alpha: .48),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Container(
+                      width: 46,
+                      height: 46,
                       decoration: BoxDecoration(
-                        shape: BoxShape.circle,
                         gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Color(0xFFFFE398),
-                            Color(0xFFFFBE48),
-                            Color(0xFFFF9863),
-                          ],
+                          colors: [AppTheme.seed, AppTheme.mint],
                         ),
-                        border: Border.all(color: Colors.black, width: 4),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x35FFC857),
-                            blurRadius: 20,
-                            spreadRadius: 1,
+                        borderRadius: BorderRadius.circular(17),
+                      ),
+                      child: const Icon(
+                        Icons.auto_awesome_rounded,
+                        color: Color(0xFF161522),
+                        size: 25,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Ещё в Планёрке',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'Важное — под рукой',
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: scheme.onSurfaceVariant),
                           ),
                         ],
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: FloatingActionButton(
-                          heroTag: 'center-quick-capture',
-                          tooltip: 'Добавить задачу',
-                          onPressed: () {
-                            unawaited(HapticFeedback.lightImpact());
-                            unawaited(_showQuickCapture(context));
-                          },
-                          backgroundColor: Colors.transparent,
-                          foregroundColor: const Color(0xFF241700),
-                          elevation: 0,
-                          highlightElevation: 0,
-                          shape: const CircleBorder(),
-                          child: const Icon(Icons.add_rounded, size: 30),
-                        ),
-                      ),
                     ),
+                    IconButton(
+                      tooltip: 'Закрыть',
+                      onPressed: () => Navigator.maybePop(context),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Твои разделы',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 10),
+                GridView.count(
+                  key: const Key('secondary-menu-destinations'),
+                  crossAxisCount: 2,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 9,
+                  crossAxisSpacing: 9,
+                  childAspectRatio: 2.08,
+                  children: [
+                    _SecondaryMenuTile(
+                      key: const Key('secondary-menu-goals'),
+                      title: 'Цели',
+                      subtitle: 'Главное и прогресс',
+                      icon: Icons.flag_rounded,
+                      color: AppTheme.seed,
+                      onTap: () => onSelect('goals'),
+                    ),
+                    _SecondaryMenuTile(
+                      key: const Key('secondary-menu-projects'),
+                      title: 'Проекты',
+                      subtitle: 'По шагам',
+                      icon: Icons.account_tree_rounded,
+                      color: const Color(0xFF65C8FF),
+                      onTap: () => onSelect('projects'),
+                    ),
+                    _SecondaryMenuTile(
+                      key: const Key('secondary-menu-habits'),
+                      title: 'Привычки',
+                      subtitle: 'Ритм и серии',
+                      icon: Icons.auto_awesome_rounded,
+                      color: AppTheme.coral,
+                      onTap: () => onSelect('habits'),
+                    ),
+                    _SecondaryMenuTile(
+                      key: const Key('secondary-menu-journal'),
+                      title: 'Дневник',
+                      subtitle: 'Настроение и заметки',
+                      icon: Icons.mood_rounded,
+                      color: AppTheme.pink,
+                      onTap: () => onSelect('journal'),
+                    ),
+                    _SecondaryMenuTile(
+                      key: const Key('secondary-menu-model'),
+                      title: 'ИИ',
+                      subtitle: 'Локальная модель',
+                      icon: Icons.smart_toy_rounded,
+                      color: AppTheme.mint,
+                      onTap: () => onSelect('model'),
+                    ),
+                    _SecondaryMenuTile(
+                      key: const Key('secondary-menu-backup'),
+                      title: 'Данные',
+                      subtitle: 'Копия и фон',
+                      icon: Icons.tune_rounded,
+                      color: const Color(0xFFFFC857),
+                      onTap: () => onSelect('backup'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'Настройки',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _SecondaryMenuTile(
+                        key: const Key('secondary-menu-theme'),
+                        title: 'Тема',
+                        subtitle: 'Цвета',
+                        icon: Icons.palette_rounded,
+                        color: const Color(0xFFFFC857),
+                        onTap: () => onSelect('theme'),
+                      ),
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: _SecondaryMenuTile(
+                        key: const Key('sleep-mode-menu-item'),
+                        title: 'Сон',
+                        subtitle: sleepEnabled ? 'Включён' : 'Выключен',
+                        icon: sleepEnabled
+                            ? Icons.nights_stay_rounded
+                            : Icons.bedtime_outlined,
+                        color: const Color(0xFF8B9DFF),
+                        onTap: () => onSelect('sleep'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SecondaryMenuTile extends StatelessWidget {
+  const _SecondaryMenuTile({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: '$title. $subtitle',
+    button: true,
+    onTap: onTap,
+    excludeSemantics: true,
+    child: Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(19),
+        onTap: onTap,
+        child: Ink(
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: .075),
+            borderRadius: BorderRadius.circular(19),
+            border: Border.all(color: color.withValues(alpha: .25)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        color.withValues(alpha: .34),
+                        color.withValues(alpha: .13),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: color, size: 21),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -949,7 +1304,7 @@ class _QuickCaptureSheetState extends State<_QuickCaptureSheet> {
             key: const Key('quick-capture-save'),
             onPressed: _save,
             icon: const Icon(Icons.inbox_rounded),
-            label: const Text('Сохранить в Inbox'),
+            label: const Text('Сохранить во входящие'),
           ),
         ],
       ),

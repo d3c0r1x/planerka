@@ -1,8 +1,11 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
 import '../../core/models.dart';
 import '../shifts/shift_calendar_section.dart';
+import '../shifts/shift_models.dart';
 import '../shifts/shift_repository.dart';
 import '../shifts/shift_setup_screen.dart';
 import 'planning_repository.dart';
@@ -48,13 +51,22 @@ class _CalendarScreenState extends State<CalendarScreen> {
         widget.repository.listForDay(DateTime(month.year, month.month, day)),
     ]);
     final shiftFuture = widget.shifts.calendar(month, end);
-    final (tasks, shifts) = await (taskFuture, shiftFuture).wait;
+    final teamFuture = widget.shifts.listTeams();
+    final (tasks, shifts, teams) = await (
+      taskFuture,
+      shiftFuture,
+      teamFuture,
+    ).wait;
+    final shiftsByDay = <int, List<ShiftDayStatus>>{};
+    for (final shift in shifts) {
+      if (!shift.cancelled && shift.workStart != null) {
+        shiftsByDay.putIfAbsent(shift.date.day, () => []).add(shift);
+      }
+    }
     return _MonthData(
       tasks: {for (var day = 1; day <= days; day++) day: tasks[day - 1]},
-      shiftDays: {
-        for (final shift in shifts)
-          if (!shift.cancelled && shift.workStart != null) shift.date.day,
-      },
+      teams: {for (final team in teams) team.id: team},
+      shiftDays: shiftsByDay,
     );
   }
 
@@ -454,28 +466,36 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                   date,
                                   DateTime.now(),
                                 );
-                                final data =
+                                final monthData =
                                     snapshot.connectionState ==
                                         ConnectionState.done
                                     ? snapshot.data
                                     : null;
                                 final tasks =
-                                    data?.tasks[day] ?? const <TaskEntry>[];
+                                    monthData?.tasks[day] ??
+                                    const <TaskEntry>[];
                                 final deadline = tasks.any(
                                   (task) => DateUtils.isSameDay(
                                     task.dueAt?.toLocal(),
                                     date,
                                   ),
                                 );
-                                final shift =
-                                    data?.shiftDays.contains(day) ?? false;
+                                final dayShifts =
+                                    monthData?.shiftDays[day] ??
+                                    const <ShiftDayStatus>[];
+                                final shiftLabels = [
+                                  for (final status in dayShifts)
+                                    if (monthData?.teams[status.teamId]
+                                        case final team?)
+                                      _shiftSemanticLabel(team, status),
+                                ];
                                 final suffix =
                                     '${date.year}-${date.month}-${date.day}';
                                 final eventsLabel = snapshot.hasError
                                     ? 'данные недоступны'
-                                    : data == null
+                                    : monthData == null
                                     ? 'события загружаются'
-                                    : '${tasks.length} задач${deadline ? ', есть дедлайн' : ''}${shift ? ', есть смена' : ''}';
+                                    : '${tasks.length} задач${deadline ? ', есть дедлайн' : ''}${dayShifts.isNotEmpty ? ', есть смена${shiftLabels.isEmpty ? '' : ': ${shiftLabels.join('; ')}'}' : ''}';
                                 return Semantics(
                                   label:
                                       '${MaterialLocalizations.of(context).formatFullDate(date)}, $eventsLabel',
@@ -526,27 +546,70 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                               ),
                                               const SizedBox(height: 4),
                                               SizedBox(
-                                                height: 4,
-                                                child: Row(
+                                                height: 14,
+                                                child: Column(
                                                   mainAxisAlignment:
                                                       MainAxisAlignment.center,
                                                   children: [
-                                                    if (tasks.isNotEmpty)
-                                                      _dot(
-                                                        'calendar-task-marker-$suffix',
-                                                        selected
-                                                            ? scheme.onPrimary
-                                                            : AppTheme.seed,
+                                                    SizedBox(
+                                                      height: 6,
+                                                      child: Row(
+                                                        mainAxisAlignment:
+                                                            MainAxisAlignment
+                                                                .center,
+                                                        children: [
+                                                          if (tasks.isNotEmpty)
+                                                            _dot(
+                                                              'calendar-task-marker-$suffix',
+                                                              selected
+                                                                  ? scheme
+                                                                        .onPrimary
+                                                                  : AppTheme
+                                                                        .seed,
+                                                            ),
+                                                          if (deadline) ...[
+                                                            if (tasks
+                                                                .isNotEmpty)
+                                                              const SizedBox(
+                                                                width: 2,
+                                                              ),
+                                                            _deadlineDiamond(
+                                                              'calendar-deadline-marker-$suffix',
+                                                              AppTheme.coral,
+                                                            ),
+                                                          ],
+                                                        ],
                                                       ),
-                                                    if (deadline)
-                                                      _dot(
-                                                        'calendar-deadline-marker-$suffix',
-                                                        AppTheme.coral,
-                                                      ),
-                                                    if (shift)
-                                                      _dot(
-                                                        'calendar-shift-marker-$suffix',
-                                                        AppTheme.mint,
+                                                    ),
+                                                    if (dayShifts.isNotEmpty)
+                                                      SizedBox(
+                                                        height: 6,
+                                                        child: Row(
+                                                          key: ValueKey(
+                                                            'calendar-shift-marker-$suffix',
+                                                          ),
+                                                          mainAxisAlignment:
+                                                              MainAxisAlignment
+                                                                  .center,
+                                                          mainAxisSize:
+                                                              MainAxisSize.min,
+                                                          children: [
+                                                            for (final status
+                                                                in dayShifts)
+                                                              _shiftPill(
+                                                                'calendar-shift-marker-$suffix-${status.teamId}',
+                                                                Color(
+                                                                  monthData
+                                                                          ?.teams[status
+                                                                              .teamId]
+                                                                          ?.colorValue ??
+                                                                      AppTheme
+                                                                          .mint
+                                                                          .toARGB32(),
+                                                                ),
+                                                              ),
+                                                          ],
+                                                        ),
                                                       ),
                                                   ],
                                                 ),
@@ -563,18 +626,29 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           ),
                       ],
                     ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 6,
+                    children: [
+                      _markerLegend(
+                        'Задачи',
+                        AppTheme.seed,
+                        shape: _MarkerShape.circle,
+                      ),
+                      _markerLegend(
+                        'Дедлайны',
+                        AppTheme.coral,
+                        shape: _MarkerShape.diamond,
+                      ),
+                      if (snapshot.connectionState == ConnectionState.done &&
+                          snapshot.data != null)
+                        for (final team in snapshot.data!.teams.values)
+                          _teamMarkerLegend(team),
+                    ],
+                  ),
                 ],
               ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 12,
-              runSpacing: 6,
-              children: [
-                _markerLegend('Задачи', AppTheme.seed),
-                _markerLegend('Дедлайны', AppTheme.coral),
-                _markerLegend('Смены', AppTheme.mint),
-              ],
             ),
           ],
         ),
@@ -584,24 +658,102 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   Widget _dot(String key, Color color) => Container(
     key: ValueKey(key),
-    width: 4,
-    height: 4,
-    margin: const EdgeInsets.symmetric(horizontal: 1),
+    width: 6,
+    height: 6,
     decoration: BoxDecoration(color: color, shape: BoxShape.circle),
   );
 
-  Widget _markerLegend(String title, Color color) => Row(
+  Widget _deadlineDiamond(String key, Color color) => Transform.rotate(
+    key: ValueKey('$key-transform'),
+    angle: math.pi / 4,
+    child: Container(
+      key: ValueKey(key),
+      width: 6,
+      height: 6,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(1),
+      ),
+    ),
+  );
+
+  Widget _shiftPill(String key, Color color) => Container(
+    key: ValueKey(key),
+    width: 8,
+    height: 4,
+    margin: const EdgeInsets.symmetric(horizontal: 1),
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(99),
+    ),
+  );
+
+  Widget _markerLegend(
+    String title,
+    Color color, {
+    required _MarkerShape shape,
+  }) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      if (shape == _MarkerShape.circle)
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        )
+      else
+        Transform.rotate(
+          angle: math.pi / 4,
+          child: Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(1),
+            ),
+          ),
+        ),
+      const SizedBox(width: 5),
+      Text(title, style: const TextStyle(fontSize: 12)),
+    ],
+  );
+
+  Widget _teamMarkerLegend(ShiftTeam team) => Row(
+    key: ValueKey('calendar-shift-legend-${team.id}'),
     mainAxisSize: MainAxisSize.min,
     children: [
       Container(
-        width: 5,
+        key: ValueKey('calendar-shift-legend-color-${team.id}'),
+        width: 10,
         height: 5,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        decoration: BoxDecoration(
+          color: Color(team.colorValue),
+          borderRadius: BorderRadius.circular(99),
+        ),
       ),
       const SizedBox(width: 5),
-      Text(title, style: const TextStyle(fontSize: 10)),
+      Text(team.name, style: const TextStyle(fontSize: 12)),
     ],
   );
+
+  String _shiftSemanticLabel(ShiftTeam team, ShiftDayStatus status) {
+    final phase = switch (status.phase) {
+      ShiftPhase.day => 'дневная',
+      ShiftPhase.preNightRest => 'отдых перед ночной сменой',
+      ShiftPhase.night => 'ночная',
+      ShiftPhase.recovery => 'отсыпной',
+      ShiftPhase.rest => 'выходной',
+    };
+    final start = status.workStart;
+    final end = status.workEnd;
+    final hours = start == null || end == null
+        ? ''
+        : ', ${_time(start)}–${_time(end)}';
+    return '${team.name}, $phase$hours';
+  }
+
+  String _time(DateTime value) =>
+      '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
 
   Widget _legendChip(IconData icon, String label, Color color) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
@@ -712,8 +864,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
   ][value - 1];
 }
 
+enum _MarkerShape { circle, diamond }
+
 class _MonthData {
-  const _MonthData({required this.tasks, required this.shiftDays});
+  const _MonthData({
+    required this.tasks,
+    required this.teams,
+    required this.shiftDays,
+  });
+
   final Map<int, List<TaskEntry>> tasks;
-  final Set<int> shiftDays;
+  final Map<String, ShiftTeam> teams;
+  final Map<int, List<ShiftDayStatus>> shiftDays;
 }

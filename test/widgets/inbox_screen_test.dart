@@ -1,10 +1,12 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:planerka/app.dart';
 import 'package:planerka/core/app_database.dart';
+import 'package:planerka/features/inbox/inbox_screen.dart';
 import 'package:planerka/features/inbox/inbox_repository.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -24,6 +26,82 @@ void main() {
   tearDown(() async {
     await database.close();
     await directory.delete(recursive: true);
+  });
+
+  testWidgets('Inbox entry is compact, clear, and keeps accessible actions', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(720, 1600);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final entry = await InboxRepository(database).add('Подготовить портфолио');
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: InboxScreen(repository: InboxRepository(database)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final card = find.byKey(ValueKey('inbox-entry-${entry.id}'));
+    expect(card, findsOneWidget);
+    expect(tester.getSize(card).height, lessThanOrEqualTo(230));
+    expect(find.byKey(const Key('inbox-entry-type')), findsOneWidget);
+    expect(find.byKey(const Key('inbox-empty-triage-guide')), findsNothing);
+    expect(find.byKey(const Key('inbox-entry-priority')), findsOneWidget);
+    expect(find.text('На разборе'), findsOneWidget);
+    expect(find.text('Без приоритета'), findsOneWidget);
+    expect(find.byTooltip('Приоритет не задан'), findsOneWidget);
+    expect(find.text('Выбери, что делать дальше'), findsNothing);
+
+    final semanticsHandle = tester.ensureSemantics();
+    for (final (key, tooltip) in [
+      (const Key('inbox-triage-quick'), 'Сделать быстро'),
+      (const Key('inbox-triage-planned'), 'Запланировать'),
+      (const Key('inbox-triage-project'), 'Большой проект'),
+    ]) {
+      final action = find.descendant(of: card, matching: find.byKey(key));
+      expect(action, findsOneWidget);
+      expect(find.byTooltip(tooltip), findsOneWidget);
+      expect(
+        tester
+            .getSemantics(action)
+            .getSemanticsData()
+            .hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+    }
+    semanticsHandle.dispose();
+    expect(find.byTooltip('Связать с целью'), findsOneWidget);
+    expect(find.byTooltip('Изменить'), findsOneWidget);
+    expect(find.byTooltip('Другие действия'), findsOneWidget);
+  });
+
+  testWidgets('empty Inbox explains the three next-step routes', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(PlanerkaApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('nav-inbox')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Входящие'), findsAtLeastNWidgets(1));
+    expect(find.byKey(const Key('inbox-empty-triage-guide')), findsOneWidget);
+    expect(find.text('Быстро'), findsOneWidget);
+    expect(find.text('Срок'), findsOneWidget);
+    expect(find.text('Проект'), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const Key('inbox-empty-triage-guide'))).height,
+      lessThanOrEqualTo(180),
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('add and triage an Inbox entry from the app', (tester) async {
@@ -165,6 +243,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('nav-inbox')));
     await tester.pumpAndSettle();
-    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byKey(const Key('app-navigation-dock')), findsOneWidget);
   });
 }

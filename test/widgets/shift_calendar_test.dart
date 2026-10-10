@@ -282,6 +282,157 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'month shift markers use configured team colors and expose team names accessibly',
+    (tester) async {
+      const palette = <String, int>{
+        'a': 0xFF9B7BFF,
+        'b': 0xFF43D9C4,
+        'c': 0xFFFFA34D,
+        'd': 0xFFFF6688,
+      };
+      final visualTeams = [
+        _team('a', 0, name: 'Смена Альфа', colorValue: palette['a']!),
+        _team('b', 2, name: 'Смена Бета', colorValue: palette['b']!),
+        _team('c', 4, name: 'Смена Гамма', colorValue: palette['c']!),
+        _team(
+          'd',
+          6,
+          attends: false,
+          name: 'Смена Дельта',
+          colorValue: palette['d']!,
+        ),
+      ];
+      await shifts.saveSchedule(ShiftSettings(anchorDate: anchor), visualTeams);
+
+      final inbox = InboxRepository(database);
+      final task = await inbox.add('Проверить отчёт');
+      await inbox.triage(
+        task.id,
+        TaskDisposition.planned,
+        dueAt: DateTime(anchor.year, anchor.month, anchor.day, 18),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CalendarScreen(
+            repository: PlanningRepository(database),
+            shifts: shifts,
+            initialDate: anchor,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final suffix = '${anchor.year}-${anchor.month}-${anchor.day}';
+      final daySemantics = tester
+          .getSemantics(find.byKey(Key('calendar-day-$suffix')))
+          .label;
+      final workingTeams = (await shifts.calendar(
+        anchor,
+        anchor.add(const Duration(days: 1)),
+      )).where((status) => !status.cancelled && status.workStart != null);
+
+      for (final status in workingTeams) {
+        final team = visualTeams.singleWhere(
+          (team) => team.id == status.teamId,
+        );
+        final marker = find.byKey(
+          Key('calendar-shift-marker-$suffix-${team.id}'),
+        );
+        expect(marker, findsOneWidget, reason: 'marker for ${team.name}');
+        final decoration = tester.widget<Container>(marker).decoration!;
+        final markerSize = tester.getSize(marker);
+        expect(
+          markerSize.width,
+          greaterThan(markerSize.height),
+          reason: '${team.name} needs an elongated shift pill',
+        );
+        expect(markerSize.width, greaterThanOrEqualTo(8));
+        expect(markerSize.height, greaterThanOrEqualTo(4));
+        expect(
+          (decoration as BoxDecoration).shape,
+          BoxShape.rectangle,
+          reason: '${team.name} uses a pill, not a circular dot',
+        );
+        expect(
+          decoration.borderRadius,
+          isNotNull,
+          reason: '${team.name} shift marker has rounded pill ends',
+        );
+        expect(
+          decoration.color,
+          Color(team.colorValue),
+          reason: 'configured color for ${team.name}',
+        );
+        expect(daySemantics, contains(team.name));
+      }
+      expect(workingTeams.length, 2);
+      expect(daySemantics, contains('есть смена'));
+
+      for (final team in visualTeams) {
+        final legend = find.byKey(Key('calendar-shift-legend-${team.id}'));
+        expect(legend, findsOneWidget, reason: 'legend for ${team.name}');
+        expect(
+          find.descendant(of: legend, matching: find.text(team.name)),
+          findsOneWidget,
+        );
+        expect(
+          tester
+              .widget<Text>(
+                find.descendant(of: legend, matching: find.text(team.name)),
+              )
+              .style
+              ?.fontSize,
+          12,
+        );
+        final legendDot = find.byKey(
+          Key('calendar-shift-legend-color-${team.id}'),
+        );
+        final legendDecoration =
+            tester.widget<Container>(legendDot).decoration! as BoxDecoration;
+        expect(legendDecoration.color, Color(team.colorValue));
+      }
+
+      final taskMarker = find.byKey(Key('calendar-task-marker-$suffix'));
+      expect(taskMarker, findsOneWidget);
+      final taskMarkerSize = tester.getSize(taskMarker);
+      expect(taskMarkerSize.width, taskMarkerSize.height);
+      expect(taskMarkerSize.width, greaterThanOrEqualTo(6));
+      expect(
+        (tester.widget<Container>(taskMarker).decoration! as BoxDecoration)
+            .shape,
+        BoxShape.circle,
+      );
+
+      final deadlineMarker = find.byKey(
+        Key('calendar-deadline-marker-$suffix'),
+      );
+      expect(deadlineMarker, findsOneWidget);
+      final deadlineSize = tester.getSize(deadlineMarker);
+      expect(deadlineSize.width, deadlineSize.height);
+      expect(deadlineSize.width, greaterThanOrEqualTo(6));
+      final deadlineRotation = find.byKey(
+        Key('calendar-deadline-marker-$suffix-transform'),
+      );
+      expect(deadlineRotation, findsOneWidget);
+      final rotation = tester.widget<Transform>(deadlineRotation);
+      expect(rotation.transform.entry(0, 0).abs(), lessThan(0.9));
+      expect(rotation.transform.entry(0, 1).abs(), greaterThan(0.5));
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('shift-day-a')),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.byKey(const Key('shift-day-a')), findsOneWidget);
+      expect(find.textContaining('Смена Альфа · Дневная'), findsOneWidget);
+      expect(
+        find.textContaining('Работа 08:00–20:00 · дорога 07:00–21:30'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('month shift markers refresh after a day override', (
     tester,
   ) async {
@@ -456,11 +607,17 @@ class _RetryablePlanningRepository extends PlanningRepository {
   }
 }
 
-ShiftTeam _team(String id, int offset, {bool attends = true}) => ShiftTeam(
+ShiftTeam _team(
+  String id,
+  int offset, {
+  bool attends = true,
+  String? name,
+  int colorValue = 0xFF66D8CE,
+}) => ShiftTeam(
   id: id,
-  name: 'Смена ${id.toUpperCase()}',
+  name: name ?? 'Смена ${id.toUpperCase()}',
   leaderName: 'Руководитель ${id.toUpperCase()}',
-  colorValue: 0xFF66D8CE,
+  colorValue: colorValue,
   phaseOffsetDays: offset,
   attends: attends,
 );

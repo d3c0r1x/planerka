@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:planerka/app.dart';
@@ -63,6 +64,13 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  Future<void> openGoalsFromMenu(WidgetTester tester) async {
+    await tester.tap(find.byTooltip('Ещё'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Цели').last);
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('home opens goals with task progress and an empty state', (
     tester,
   ) async {
@@ -78,8 +86,7 @@ void main() {
     await tester.pumpWidget(PlanerkaApp(database: database));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('home-primary-goal-progress')), findsOneWidget);
-    await tester.tap(find.byTooltip('Цели'));
-    await tester.pumpAndSettle();
+    await openGoalsFromMenu(tester);
 
     expect(find.text('Цели'), findsOneWidget);
     expect(find.byKey(const Key('goal-task-progress')), findsOneWidget);
@@ -93,8 +100,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(PlanerkaApp(database: database));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Цели'));
-    await tester.pumpAndSettle();
+    await openGoalsFromMenu(tester);
 
     expect(find.text('1 из 1 шагов выполнено'), findsOneWidget);
     expect(find.text('Добавьте шаг, чтобы видеть прогресс'), findsNothing);
@@ -115,13 +121,77 @@ void main() {
 
     await tester.pumpWidget(PlanerkaApp(database: database));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Цели'));
-    await tester.pumpAndSettle();
+    await openGoalsFromMenu(tester);
 
     expect(find.text('Здоровье'), findsAtLeastNWidgets(1));
     expect(find.text('Развитие'), findsAtLeastNWidgets(1));
     expect(find.byKey(const Key('goal-task-progress')), findsNWidgets(2));
   });
+
+  testWidgets(
+    'goals keep primary progress first and center accessible add action',
+    (tester) async {
+      tester.view.physicalSize = const Size(720, 1600);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final planning = PlanningRepository(database);
+      final primary = await planning.addGoal('Главный ориентир');
+      await planning.setPrimaryGoals({primary.id});
+      await planning.addGoal('Дополнительный ориентир');
+
+      await tester.pumpWidget(
+        MaterialApp(home: GoalsScreen(repository: planning)),
+      );
+      await tester.pumpAndSettle();
+
+      final primaryProgress = find.byKey(const Key('primary-goal-progress'));
+      final goals = await planning.listGoals();
+      final secondaryGoal = find.byKey(ValueKey('goal-card-${goals.last.id}'));
+      expect(primaryProgress, findsOneWidget);
+      expect(secondaryGoal, findsOneWidget);
+      expect(
+        tester.getTopLeft(primaryProgress).dy,
+        lessThan(tester.getTopLeft(secondaryGoal).dy),
+      );
+
+      const actionKey = Key('goals-add-action');
+      final addAction = find.byKey(actionKey);
+      expect(addAction, findsOneWidget);
+      expect(find.byTooltip('Добавить цель'), findsOneWidget);
+      expect((tester.getRect(addAction).center.dx - 180).abs(), lessThan(1));
+
+      final semanticsHandle = tester.ensureSemantics();
+      final semantics = tester.getSemantics(addAction).getSemanticsData();
+      expect(
+        '${semantics.label} ${semantics.tooltip}',
+        contains('Добавить цель'),
+      );
+      expect(semantics.hasAction(SemanticsAction.tap), isTrue);
+      semanticsHandle.dispose();
+
+      await tester.tap(addAction);
+      await tester.pumpAndSettle();
+      expect(find.text('Новая цель'), findsOneWidget);
+      await tester.enterText(
+        find.byType(TextField).first,
+        'Новая проверочная цель',
+      );
+      await tester.tap(find.text('Сохранить'));
+      await tester.pumpAndSettle();
+      final createdGoal = (await planning.listGoals()).singleWhere(
+        (goal) => goal.title == 'Новая проверочная цель',
+      );
+      final createdGoalCard = find.byKey(
+        ValueKey('goal-card-${createdGoal.id}'),
+        skipOffstage: false,
+      );
+      await tester.ensureVisible(createdGoalCard);
+      await tester.pumpAndSettle();
+      expect(find.text('Новая проверочная цель'), findsOneWidget);
+    },
+  );
 
   testWidgets('primary goal hero shows truthful percent and next open step', (
     tester,
@@ -141,8 +211,7 @@ void main() {
 
     await tester.pumpWidget(PlanerkaApp(database: database));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Цели'));
-    await tester.pumpAndSettle();
+    await openGoalsFromMenu(tester);
 
     expect(find.text('50%'), findsOneWidget);
     expect(find.text('1 из 2 шагов выполнено'), findsOneWidget);
@@ -169,8 +238,7 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.tap(find.byKey(const ValueKey('nav-today')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Цели'));
-    await tester.pumpAndSettle();
+    await openGoalsFromMenu(tester);
     expect(tester.takeException(), isNull);
   });
 

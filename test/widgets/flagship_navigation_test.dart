@@ -46,7 +46,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final capture = find.byKey(const Key('center-action-button'));
-    expect(tester.getSemantics(capture).label, 'Записать задачу в Inbox');
+    expect(tester.getSemantics(capture).label, 'Записать задачу во входящие');
     expect(tester.getSize(capture).shortestSide, greaterThanOrEqualTo(48));
     for (final icon in [Icons.inbox_rounded, Icons.bolt_rounded]) {
       expect(
@@ -61,14 +61,20 @@ void main() {
     await tester.tap(find.byIcon(Icons.inbox_rounded).first);
     await tester.pumpAndSettle();
     expect(
-      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-      1,
+      tester
+          .widget<Semantics>(find.byKey(const Key('nav-inbox')))
+          .properties
+          .selected,
+      isTrue,
     );
     await tester.tap(find.byIcon(Icons.bolt_rounded).first);
     await tester.pumpAndSettle();
     expect(
-      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-      2,
+      tester
+          .widget<Semantics>(find.byKey(const Key('nav-focus')))
+          .properties
+          .selected,
+      isTrue,
     );
     await tester.tap(capture);
     await tester.pumpAndSettle();
@@ -84,10 +90,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 240));
     await tester.pumpAndSettle();
 
-    expect(find.byTooltip('Цветовая тема'), findsOneWidget);
+    expect(find.byTooltip('Цветовая тема'), findsNothing);
     expect(find.byTooltip('Календарь'), findsOneWidget);
-    expect(find.byTooltip('Проекты'), findsOneWidget);
-    expect(find.byTooltip('Цели'), findsOneWidget);
+    expect(find.byTooltip('Проекты'), findsNothing);
+    expect(find.byTooltip('Цели'), findsNothing);
     expect(find.byTooltip('Ещё'), findsOneWidget);
     await tester.enterText(find.byKey(const Key('home-inbox-input')), 'Идея');
     await tester.tap(find.byKey(const Key('home-inbox-submit')));
@@ -98,10 +104,13 @@ void main() {
     expect(rows.single['title'], 'Идея');
     expect(rows.single['status'], 'inbox');
     expect(find.text('Идея'), findsNothing);
-    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byKey(const Key('app-navigation-dock')), findsOneWidget);
     expect(
-      (tester.widget<NavigationBar>(find.byType(NavigationBar))).selectedIndex,
-      0,
+      tester
+          .widget<Semantics>(find.byKey(const Key('nav-today')))
+          .properties
+          .selected,
+      isTrue,
     );
   });
 
@@ -153,8 +162,11 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
     expect(
-      (tester.widget<NavigationBar>(find.byType(NavigationBar))).selectedIndex,
-      1,
+      tester
+          .widget<Semantics>(find.byKey(const Key('nav-inbox')))
+          .properties
+          .selected,
+      isTrue,
     );
     expect(find.byKey(const Key('inbox-hero')), findsOneWidget);
   });
@@ -169,7 +181,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Ещё'));
     await tester.pumpAndSettle();
-    expect(find.text('Режим сна'), findsOneWidget);
+    expect(find.text('Сон'), findsOneWidget);
     await tester.tap(find.byKey(const Key('sleep-mode-menu-item')));
     await tester.pumpAndSettle();
 

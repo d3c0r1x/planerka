@@ -191,7 +191,9 @@ void main() {
     await inbox.triage(source.id, TaskDisposition.project);
 
     await tester.pumpWidget(PlanerkaApp(database: database));
-    await tester.tap(find.byTooltip('Проекты'));
+    await tester.tap(find.byTooltip('Ещё'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Проекты').last);
     await tester.pumpAndSettle();
     expect(find.text('Большой проект'), findsOneWidget);
     await tester.tap(find.byTooltip('Добавить шаг'));
@@ -206,7 +208,9 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(PlanerkaApp(database: database));
-    await tester.tap(find.byTooltip('Цели'));
+    await tester.tap(find.byTooltip('Ещё'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Цели').last);
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Добавить цель'));
     await tester.pumpAndSettle();

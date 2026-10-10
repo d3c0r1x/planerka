@@ -8,6 +8,7 @@ import 'package:planerka/app.dart';
 import 'package:planerka/core/app_database.dart';
 import 'package:planerka/core/app_theme.dart';
 import 'package:planerka/features/inbox/inbox_repository.dart';
+import 'package:planerka/features/gamification/gamification_service.dart';
 import 'package:planerka/features/home/home_screen.dart';
 import 'package:planerka/features/planning/planning_repository.dart';
 import 'package:planerka/features/wellbeing/wellbeing_repository.dart';
@@ -60,7 +61,7 @@ void main() {
       tester.getTopLeft(find.byKey(const Key('home-today-section'))).dy,
       lessThan(640),
     );
-    expect(find.text('Inbox'), findsAtLeastNWidgets(1));
+    expect(find.text('Входящие'), findsAtLeastNWidgets(1));
     expect(find.text('Таймер'), findsOneWidget);
     expect(find.text('Привычки'), findsOneWidget);
     expect(find.text('Дневник'), findsOneWidget);
@@ -103,6 +104,9 @@ void main() {
             onHabits: () {},
             onJournal: () {},
             onQuickCapture: (_) async {},
+            onAiPlanning: () {},
+            gamification: GamificationService(database),
+            onGamification: () {},
             onModel: () {},
             onChooseGoal: () {},
           ),
@@ -174,8 +178,11 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
     expect(
-      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-      1,
+      tester
+          .widget<Semantics>(find.byKey(const Key('nav-inbox')))
+          .properties
+          .selected,
+      isTrue,
     );
   });
 }

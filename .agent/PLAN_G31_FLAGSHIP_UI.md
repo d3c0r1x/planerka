@@ -44,9 +44,22 @@ Refresh `lib/features/inbox/inbox_screen.dart` and `lib/features/goals/goals_scr
 Refresh `lib/features/timers/focus_screen.dart` and `lib/features/review/progress_screen.dart`.
 
 - Make the timer the visual anchor with radial progress, selected task, and one primary control. Give recovery and breathing their own secondary card.
-- Show completion, focus, and habit progress with clear period context and comparisons backed by existing data.
+- Show completion, focus, habit, and mood-rating progress with clear period context and comparisons backed by existing data. Mood reporting may use rating aggregates only; never render diary text.
 - Preserve session modes, pause/resume/finish, task selection, breathing, day/week selection, and existing metrics.
 - Update widget tests, including a narrow-screen overflow check.
+
+## Task 5 — Flagship integration pass
+
+Close the remaining gaps from the user's accepted product decisions across `home_screen.dart`, `goals_screen.dart`, and `calendar_screen.dart`.
+
+- Put the primary goal and its progress at the top of Home; keep the Goals screen progress bar first and its colorful circular add action centered at the bottom.
+- Keep the first Home viewport useful: primary goal, one-tap Inbox capture, and Today tasks appear before supporting panels. Move AI and XP/rewards below the task list; keep a compact model-download status near the top when it needs attention.
+- Reduce Home's crowded app bar to the most used actions and keep remaining routes reachable from the overflow/settings entry. Preserve quick capture and swipe navigation.
+- Expose AI planning and game progress/rewards from Home. AI remains proposal-only; keep approval and missing-model recovery paths intact, and remove static AI claims that do not reflect saved state.
+- Show distinct markers and a readable legend for all configured shift teams in the month calendar; preserve task and deadline markers and selected-day shift details.
+- Give Goals/AI, Inbox, Focus, recovery/habits, and XP clear color roles. Use compact task rows, large meaningful progress, distinct calendar marker shapes, aligned navigation hit areas, and reduced-motion-aware feedback instead of repeating generic panels.
+- Show loading and retry states for Home goal progress; never turn a failed read into an empty goal or zero progress.
+- Add integration/widget tests for hierarchy, navigation, honest progress, all four team colors, and narrow-screen behavior.
 
 ## Completion checks
 

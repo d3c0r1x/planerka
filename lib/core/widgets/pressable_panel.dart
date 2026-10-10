@@ -29,26 +29,31 @@ class _PressablePanelState extends State<PressablePanel> {
   }
 
   @override
-  Widget build(BuildContext context) => AnimatedScale(
-    scale: _pressed ? 0.975 : 1,
-    duration: const Duration(milliseconds: 115),
-    curve: Curves.easeOutCubic,
-    child: Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(widget.borderRadius),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: widget.onTap,
-        onTapDown: (_) => _setPressed(true),
-        onTapUp: (_) => _setPressed(false),
-        onTapCancel: () => _setPressed(false),
-        child: Ink(
-          decoration: widget.decoration,
-          child: Padding(padding: widget.padding, child: widget.child),
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return AnimatedScale(
+      scale: !reduceMotion && _pressed ? 0.975 : 1,
+      duration: reduceMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 115),
+      curve: Curves.easeOutCubic,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(widget.borderRadius),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: widget.onTap,
+          onTapDown: (_) => _setPressed(true),
+          onTapUp: (_) => _setPressed(false),
+          onTapCancel: () => _setPressed(false),
+          child: Ink(
+            decoration: widget.decoration,
+            child: Padding(padding: widget.padding, child: widget.child),
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class ProgressPill extends StatelessWidget {
