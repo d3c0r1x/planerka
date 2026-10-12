@@ -109,6 +109,14 @@ void main() {
     },
   );
 
+  test('goal-link prompt marks its response as JSON-only', () async {
+    generator.response = jsonEncode({'links': []});
+
+    await service.suggestGoalLinks(['t1']);
+
+    expect(generator.lastPrompt, contains('Верни только JSON:'));
+  });
+
   test(
     'primary goal progress derives from linked tasks, not manual progress',
     () async {

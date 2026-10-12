@@ -122,15 +122,11 @@ void main() {
 
     final endpointFinder = find.byKey(const Key('ai-endpoint-field'));
     await _scrollTo(tester, endpointFinder);
-    final endpoint = tester.widget<TextField>(
-      endpointFinder,
-    );
+    final endpoint = tester.widget<TextField>(endpointFinder);
     expect(endpoint.readOnly, isTrue);
     final modelFinder = find.byKey(const Key('ai-model-field'));
     await _scrollTo(tester, modelFinder);
-    final model = tester.widget<TextField>(
-      modelFinder,
-    );
+    final model = tester.widget<TextField>(modelFinder);
     expect(
       endpoint.controller!.text,
       'https://generativelanguage.googleapis.com/v1beta',
@@ -152,6 +148,7 @@ void main() {
   ) async {
     await saveGeminiSettings();
     final catalog = _Catalog([
+      GeminiModelInfo(id: 'gemma-4-26b-a4b-it', displayName: 'Gemma 4 26B'),
       GeminiModelInfo(id: 'gemini-3.5-flash-lite', displayName: 'Flash Lite'),
       GeminiModelInfo(id: 'gemini-3.5-flash', displayName: 'Flash'),
     ]);
@@ -214,6 +211,12 @@ void main() {
       await tester.tap(contextToggle);
       await tester.pumpAndSettle();
       expect(find.text('Что может увидеть облачный ИИ'), findsOneWidget);
+      final disclosure = tester.widget<Text>(
+        find.textContaining('Если выбрать облачный режим'),
+      );
+      expect(disclosure.data, contains('статусы, сроки'));
+      expect(disclosure.data, contains('график выбранных смен'));
+      expect(disclosure.data, isNot(contains('метки и сроки')));
       await tester.tap(find.text('Разрешить контекст'));
       await tester.pumpAndSettle();
 

@@ -110,6 +110,8 @@ class GeminiRestProvider implements CloudAiProvider, GeminiModelCatalog {
         ],
         'generationConfig': {
           'maxOutputTokens': maxTokens.clamp(1, _maxOutputTokens).toInt(),
+          if (prompt.contains('только JSON'))
+            'responseMimeType': 'application/json',
         },
       },
     );
@@ -131,6 +133,7 @@ class GeminiRestProvider implements CloudAiProvider, GeminiModelCatalog {
       final request = await client
           .openUrl(method, uri)
           .timeout(_connectTimeout);
+      request.followRedirects = false;
       request.headers.set(_apiKeyHeader, apiKey);
       if (payload != null) {
         request.headers.contentType = ContentType.json;

@@ -82,8 +82,8 @@ void main() {
             jsonEncode({
               'models': [
                 {
-                  'name': 'models/gemini-3.5-flash-lite',
-                  'displayName': 'Gemini Flash Lite',
+                  'name': 'models/gemma-4-26b-a4b-it',
+                  'displayName': 'Gemma 4 26B',
                   'inputTokenLimit': 1000000,
                   'outputTokenLimit': 8192,
                   'supportedGenerationMethods': ['generateContent'],
@@ -106,8 +106,8 @@ void main() {
       final models = await catalog.listModels(apiKey: 'test-api-key');
 
       expect(models, hasLength(1));
-      expect(models.single.id, 'gemini-3.5-flash-lite');
-      expect(models.single.displayName, 'Gemini Flash Lite');
+      expect(models.single.id, 'gemma-4-26b-a4b-it');
+      expect(models.single.displayName, 'Gemma 4 26B');
       expect(models.single.inputTokenLimit, 1000000);
       expect(models.single.outputTokenLimit, 8192);
       expect(requests, hasLength(1));
@@ -167,6 +167,51 @@ void main() {
     );
   });
 
+  test('does not follow a redirect while sending the API key', () async {
+    final redirectServer = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    var redirectedRequestCount = 0;
+    String? redirectedApiKey;
+    redirectServer.listen((request) async {
+      redirectedRequestCount++;
+      redirectedApiKey = request.headers.value('x-goog-api-key');
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentType = ContentType.json
+        ..write('{"models":[]}');
+      await request.response.close();
+    });
+
+    handler = (request, body) async {
+      request.response
+        ..statusCode = HttpStatus.found
+        ..headers.set(
+          HttpHeaders.locationHeader,
+          'http://${InternetAddress.loopbackIPv4.address}:${redirectServer.port}/collect',
+        );
+    };
+
+    try {
+      await expectLater(
+        GeminiRestProvider(apiBaseUri: apiBaseUri)
+            .listModels(apiKey: 'test-api-key'),
+        throwsA(
+          isA<CloudProviderRequestException>().having(
+            (error) => error.statusCode,
+            'statusCode',
+            HttpStatus.found,
+          ),
+        ),
+      );
+      expect(redirectedRequestCount, 0);
+      expect(redirectedApiKey, isNull);
+    } finally {
+      await redirectServer.close(force: true);
+    }
+  });
+
   test('generates through Gemini endpoint with bounded tokens and joins text parts', () async {
     handler = (request, body) async {
       request.response
@@ -216,6 +261,43 @@ void main() {
       },
     ]);
     expect(payload['generationConfig']['maxOutputTokens'], 512);
+    expect(
+      payload['generationConfig'].containsKey('responseMimeType'),
+      isFalse,
+    );
+  });
+
+  test('requests application/json only when prompt requires JSON', () async {
+    handler = (request, body) async {
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentType = ContentType.json
+        ..write(
+          jsonEncode({
+            'candidates': [
+              {
+                'content': {
+                  'parts': [
+                    {'text': '{"items":[]}'},
+                  ],
+                },
+              },
+            ],
+          }),
+        );
+    };
+
+    final provider = GeminiRestProvider(apiBaseUri: apiBaseUri);
+    await provider.complete(
+      prompt: 'Верни только JSON: {"items":[]}',
+      endpoint: Uri.parse(GeminiRestProvider.defaultEndpoint),
+      model: GeminiRestProvider.recommendedModelId,
+      apiKey: 'test-api-key',
+      maxTokens: 32,
+    );
+
+    final payload = jsonDecode(requests.single.body) as Map<String, dynamic>;
+    expect(payload['generationConfig']['responseMimeType'], 'application/json');
   });
 
   test('rejects a non-Google endpoint before sending the API key', () async {

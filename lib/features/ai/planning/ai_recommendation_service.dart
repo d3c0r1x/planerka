@@ -78,7 +78,7 @@ class AiRecommendationService {
 Предложи, каким целям пользователя помогают задачи. Не выдумывай задачу и цель.
 Задачи: ${jsonEncode(tasks.map((row) => {'id': row['id'], 'title': row['title'], 'notes': row['notes']}).toList())}
 Цели: ${jsonEncode(goals.map((goal) => {'id': goal.id, 'title': goal.title}).toList())}
-Верни JSON: {"links":[{"taskId":"...","goalId":"...","reason":"..."}]}. Только явные полезные связи, до 3 на задачу.
+Верни только JSON: {"links":[{"taskId":"...","goalId":"...","reason":"..."}]}. Только явные полезные связи, до 3 на задачу.
 ''';
     final response = await generator.generate(prompt, maxTokens: 512);
     final start = response.indexOf('{');
