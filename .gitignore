@@ -53,3 +53,8 @@ private/
 *.private.json
 *.private.apk
 /android/build/
+
+# Local API credentials
+.env
+.env.*
+!.env.example

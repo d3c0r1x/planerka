@@ -24,6 +24,7 @@ import 'features/ai/planning/ai_recommendation_service.dart';
 import 'features/ai/ai_provider_router.dart';
 import 'features/ai/ai_provider_settings.dart';
 import 'features/ai/ai_provider_settings_screen.dart';
+import 'features/ai/gemini_rest_provider.dart';
 import 'features/ai/secure_ai_store.dart';
 import 'features/ai/review/missed_task_review_service.dart';
 import 'features/ai/review/missed_task_review_screen.dart';
@@ -424,6 +425,7 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
           manifest: Qwen3ModelManifest.manifest,
         ),
         cloud: OpenAiCompatibleGenerator(),
+        gemini: GeminiRestProvider(),
         settings: settings.load,
         secrets: secrets,
       ),
@@ -454,27 +456,43 @@ class _PlanerkaAppState extends State<PlanerkaApp> with WidgetsBindingObserver {
       _openModelScreen();
       return;
     }
-    try {
-      final modelPath = await store.verifiedModel(Qwen3ModelManifest.manifest);
-      if (!mounted) return;
-      if (modelPath == null) {
-        _openModelScreen();
+    final providerSettings = AiProviderSettingsStore(database, SecureAiStore());
+    final configuration = await providerSettings.load();
+    final cloudMode = configuration.mode == AiProviderMode.cloud;
+    if (cloudMode) {
+      if (!configuration.allowCloudContext ||
+          !await providerSettings.hasApiKey()) {
+        _openAiSettings();
         return;
       }
-      await _navigatorKey.currentState?.push<void>(
-        MaterialPageRoute<void>(
-          builder: (_) => LocalAiScreen(
-            engine: LocalAiEngine(
-              store: store,
-              manifest: Qwen3ModelManifest.manifest,
-            ),
-            recommendations: recommendations,
-          ),
-        ),
-      );
-    } catch (_) {
-      if (mounted) _openModelScreen();
+    } else {
+      try {
+        final modelPath = await store.verifiedModel(
+          Qwen3ModelManifest.manifest,
+        );
+        if (!mounted) return;
+        if (modelPath == null) {
+          _openModelScreen();
+          return;
+        }
+      } catch (_) {
+        if (mounted) _openModelScreen();
+        return;
+      }
     }
+    if (!mounted) return;
+    await _navigatorKey.currentState?.push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => LocalAiScreen(
+          engine: LocalAiEngine(
+            store: store,
+            manifest: Qwen3ModelManifest.manifest,
+          ),
+          recommendations: recommendations,
+          cloudMode: cloudMode,
+        ),
+      ),
+    );
   }
 
   void _openGamificationScreen() {

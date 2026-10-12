@@ -34,6 +34,21 @@ class _Cloud implements CloudAiProvider {
   }
 }
 
+class _GeminiCloud extends _Cloud {
+  @override
+  Future<String> complete({
+    required String prompt,
+    required Uri endpoint,
+    required String model,
+    required String apiKey,
+    required int maxTokens,
+  }) async {
+    calls++;
+    lastPrompt = prompt;
+    return 'Gemini answer';
+  }
+}
+
 class _Secrets implements AiSecretBackend {
   final values = <String, String>{};
   @override
@@ -62,29 +77,32 @@ void main() {
     expect(cloud.calls, 0);
   });
 
-  test('approved cloud mode routes to configured provider without fallback', () async {
-    final local = _Generator('local answer');
-    final cloud = _Cloud();
-    final secrets = _Secrets()..values['ai_provider_api_key'] = 'test-secret';
-    final settings = AiProviderSettings.defaults().copyWith(
-      mode: AiProviderMode.cloud,
-      provider: 'OpenAI compatible',
-      endpoint: 'https://example.invalid/v1/chat/completions',
-      model: 'small-model',
-      allowCloudContext: true,
-    );
-    final router = AiProviderRouter(
-      local: local,
-      cloud: cloud,
-      settings: () async => settings,
-      secrets: SecureAiStore(backend: secrets),
-    );
+  test(
+    'approved cloud mode routes to configured provider without fallback',
+    () async {
+      final local = _Generator('local answer');
+      final cloud = _Cloud();
+      final secrets = _Secrets()..values['ai_provider_api_key'] = 'test-secret';
+      final settings = AiProviderSettings.defaults().copyWith(
+        mode: AiProviderMode.cloud,
+        provider: 'OpenAI compatible',
+        endpoint: 'https://example.invalid/v1/chat/completions',
+        model: 'small-model',
+        allowCloudContext: true,
+      );
+      final router = AiProviderRouter(
+        local: local,
+        cloud: cloud,
+        settings: () async => settings,
+        secrets: SecureAiStore(backend: secrets),
+      );
 
-    expect(await router.generate('minimal preview'), 'cloud answer');
-    expect(cloud.calls, 1);
-    expect(cloud.lastPrompt, 'minimal preview');
-    expect(local.calls, 0);
-  });
+      expect(await router.generate('minimal preview'), 'cloud answer');
+      expect(cloud.calls, 1);
+      expect(cloud.lastPrompt, 'minimal preview');
+      expect(local.calls, 0);
+    },
+  );
 
   test('cloud error does not fall back to local generation', () async {
     final local = _Generator('local answer');
@@ -111,4 +129,63 @@ void main() {
     expect(local.calls, 0);
     expect(cloud.calls, 1);
   });
+
+  test(
+    'Gemini setting routes to Gemini and never to compatible provider',
+    () async {
+      final local = _Generator('local answer');
+      final openAi = _Cloud();
+      final gemini = _GeminiCloud();
+      final secrets = _Secrets()..values['ai_provider_api_key'] = 'test-secret';
+      final settings = AiProviderSettings.defaults().copyWith(
+        mode: AiProviderMode.cloud,
+        provider: AiProviderRouter.geminiProviderName,
+        endpoint: 'https://generativelanguage.googleapis.com/v1beta',
+        model: 'gemini-3.5-flash-lite',
+        allowCloudContext: true,
+      );
+      final router = AiProviderRouter(
+        local: local,
+        cloud: openAi,
+        gemini: gemini,
+        settings: () async => settings,
+        secrets: SecureAiStore(backend: secrets),
+      );
+
+      expect(await router.generate('approved preview'), 'Gemini answer');
+      expect(gemini.calls, 1);
+      expect(gemini.lastPrompt, 'approved preview');
+      expect(openAi.calls, 0);
+      expect(local.calls, 0);
+    },
+  );
+
+  test(
+    'Gemini configuration never falls back when provider is unavailable',
+    () async {
+      final local = _Generator('local answer');
+      final openAi = _Cloud();
+      final secrets = _Secrets()..values['ai_provider_api_key'] = 'test-secret';
+      final settings = AiProviderSettings.defaults().copyWith(
+        mode: AiProviderMode.cloud,
+        provider: AiProviderRouter.geminiProviderName,
+        endpoint: 'https://generativelanguage.googleapis.com/v1beta',
+        model: 'gemini-3.5-flash-lite',
+        allowCloudContext: true,
+      );
+      final router = AiProviderRouter(
+        local: local,
+        cloud: openAi,
+        settings: () async => settings,
+        secrets: SecureAiStore(backend: secrets),
+      );
+
+      await expectLater(
+        router.generate('approved preview'),
+        throwsA(isA<CloudProviderConfigurationException>()),
+      );
+      expect(openAi.calls, 0);
+      expect(local.calls, 0);
+    },
+  );
 }

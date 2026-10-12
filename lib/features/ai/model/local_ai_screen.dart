@@ -7,9 +7,15 @@ import '../planning/ai_recommendation_service.dart';
 import '../planning/ai_suggestion_preview_screen.dart';
 
 class LocalAiScreen extends StatefulWidget {
-  const LocalAiScreen({super.key, required this.engine, this.recommendations});
+  const LocalAiScreen({
+    super.key,
+    required this.engine,
+    this.recommendations,
+    this.cloudMode = false,
+  });
   final LocalAiEngine engine;
   final AiRecommendationService? recommendations;
+  final bool cloudMode;
 
   @override
   State<LocalAiScreen> createState() => _LocalAiScreenState();
@@ -48,8 +54,6 @@ class _LocalAiScreenState extends State<LocalAiScreen> {
       _error = null;
     });
     try {
-      await widget.engine.load();
-      if (!mounted) return;
       await Navigator.push<bool>(
         context,
         MaterialPageRoute(
@@ -66,19 +70,30 @@ class _LocalAiScreenState extends State<LocalAiScreen> {
   Future<void> _generate() async {
     final prompt = _prompt.text.trim();
     if (prompt.isEmpty || _working) return;
+    if (widget.cloudMode && widget.recommendations == null) {
+      setState(() {
+        _answer = null;
+        _error = 'Облачный помощник не настроен.';
+      });
+      return;
+    }
     setState(() {
       _working = true;
       _error = null;
       _answer = null;
     });
     try {
-      final answer = await widget.engine.generate(prompt);
+      final generator = widget.recommendations?.generator ?? widget.engine;
+      final answer = await generator.generate(prompt, maxTokens: 256);
       if (mounted) {
         setState(() => _answer = answer);
       }
     } catch (error) {
       if (mounted) {
-        setState(() => _error = 'Локальный помощник не запустился. $error');
+        final message = widget.cloudMode
+            ? 'Облачный помощник не ответил. $error'
+            : 'Локальный помощник не запустился. $error';
+        setState(() => _error = message);
       }
     } finally {
       if (mounted) {
@@ -92,21 +107,27 @@ class _LocalAiScreenState extends State<LocalAiScreen> {
   @override
   void dispose() {
     _prompt.dispose();
-    unawaited(widget.engine.unload());
+    if (!widget.cloudMode) unawaited(widget.engine.unload());
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Локальный помощник')),
+    appBar: AppBar(
+      title: Text(
+        widget.cloudMode ? 'Облачный помощник' : 'Локальный помощник',
+      ),
+    ),
     body: ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        const Card(
+        Card(
           child: Padding(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             child: Text(
-              'Ответ создаётся на телефоне. Задачи и дневник не отправляются в интернет.',
+              widget.cloudMode
+                  ? 'Ответ создаётся облачной моделью. Текст запроса и разрешённый контекст передаются провайдеру.'
+                  : 'Ответ создаётся на телефоне. Задачи и дневник не отправляются в интернет.',
             ),
           ),
         ),
@@ -148,13 +169,13 @@ class _LocalAiScreenState extends State<LocalAiScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        if (_working)
+        if (_working && !widget.cloudMode)
           OutlinedButton.icon(
             onPressed: _cancel,
             icon: const Icon(Icons.stop_circle_outlined),
             label: const Text('Остановить'),
           )
-        else
+        else if (!_working)
           FilledButton.icon(
             onPressed: _generate,
             icon: const Icon(Icons.auto_awesome_rounded),
@@ -164,7 +185,11 @@ class _LocalAiScreenState extends State<LocalAiScreen> {
           const SizedBox(height: 16),
           const LinearProgressIndicator(),
           const SizedBox(height: 8),
-          const Text('Модель отвечает локально…'),
+          Text(
+            widget.cloudMode
+                ? 'Облачная модель отвечает…'
+                : 'Модель отвечает локально…',
+          ),
         ],
         if (_error case final error?) ...[
           const SizedBox(height: 16),

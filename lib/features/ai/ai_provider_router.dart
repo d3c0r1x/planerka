@@ -20,12 +20,17 @@ class AiProviderRouter implements AiTextGenerator {
   const AiProviderRouter({
     required this.local,
     required this.cloud,
+    this.gemini,
     required this.settings,
     required this.secrets,
   });
 
+  static const geminiProviderName = 'Google Gemini';
+  static const openAiCompatibleProviderName = 'OpenAI compatible';
+
   final AiTextGenerator local;
   final CloudAiProvider cloud;
+  final CloudAiProvider? gemini;
   final Future<AiProviderSettings> Function() settings;
   final SecureAiStore secrets;
 
@@ -51,7 +56,13 @@ class AiProviderRouter implements AiTextGenerator {
     if (apiKey == null || apiKey.trim().isEmpty) {
       throw const CloudProviderConfigurationException();
     }
-    return cloud.complete(
+    final selectedCloud = configuration.provider.trim() == geminiProviderName
+        ? gemini
+        : cloud;
+    if (selectedCloud == null) {
+      throw const CloudProviderConfigurationException();
+    }
+    return selectedCloud.complete(
       prompt: prompt,
       endpoint: endpoint,
       model: configuration.model.trim(),
@@ -77,9 +88,9 @@ class OpenAiCompatibleGenerator implements CloudAiProvider {
   }) async {
     final client = _clientFactory();
     try {
-      final request = await client.postUrl(endpoint).timeout(
-        const Duration(seconds: 20),
-      );
+      final request = await client
+          .postUrl(endpoint)
+          .timeout(const Duration(seconds: 20));
       request.headers
         ..contentType = ContentType.json
         ..set(HttpHeaders.authorizationHeader, 'Bearer $apiKey');
@@ -101,7 +112,9 @@ class OpenAiCompatibleGenerator implements CloudAiProvider {
       }
       final decoded = jsonDecode(body);
       final choices = decoded is Map ? decoded['choices'] : null;
-      final first = choices is List && choices.isNotEmpty ? choices.first : null;
+      final first = choices is List && choices.isNotEmpty
+          ? choices.first
+          : null;
       final message = first is Map ? first['message'] : null;
       final content = message is Map ? message['content'] : null;
       if (content is! String || content.trim().isEmpty) {
